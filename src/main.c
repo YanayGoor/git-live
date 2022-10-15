@@ -8,8 +8,7 @@
 #include <sys/queue.h>
 #include <curses.h>
 
-#define CHECKOUT ("checkout")
-#define REFS_COUNT 5
+#define CHECKOUT ("checkout:")
 
 struct ref {
   char *name;
@@ -18,9 +17,8 @@ struct ref {
 
 LIST_HEAD(refs, ref);
 
-int print_latest_refs(git_repository *repo, size_t max) {
+int get_latest_refs(struct refs *out, git_repository *repo, size_t max) {
   git_reflog *reflog;
-  struct refs refs = LIST_HEAD_INITIALIZER();
   struct ref *curr;
   size_t printed = 0;
 
@@ -41,12 +39,12 @@ int print_latest_refs(git_repository *repo, size_t max) {
     memset(ref->name, '\0', strlen(ref_name) + 1);
     strncpy(ref->name, ref_name, strlen(ref_name));
 
-    if (LIST_EMPTY(&refs)) {
-     LIST_INSERT_HEAD(&refs, ref, entry);
+    if (LIST_EMPTY(out)) {
+     LIST_INSERT_HEAD(out, ref, entry);
      printed++;
      continue;
     }
-    LIST_FOREACH(curr, &refs, entry) {
+    LIST_FOREACH(curr, out, entry) {
       if (strcmp(curr->name, ref->name) == 0)
         break;
       if (LIST_NEXT(curr, entry) == NULL) {
@@ -54,21 +52,34 @@ int print_latest_refs(git_repository *repo, size_t max) {
       }
     }
   }
+  return 0;
+}
 
-  int line = 0;
-  LIST_FOREACH(curr, &refs, entry) {
-    move(line++, 0);
-    clrtoeol();
-    addstr(curr->name);
+void clear_refs(struct refs *refs) {
+  while(!LIST_EMPTY(refs)) {
+    struct ref *first = LIST_FIRST(refs);
+    LIST_REMOVE(first, entry);
+    free(first->name);
+    free(first);
+  }
+}
+
+void print_refs(WINDOW *win, struct refs *refs) {
+  struct ref *curr;
+  size_t line = 0;
+
+  LIST_FOREACH(curr, refs, entry) {
+    wmove(win, line++, 0);
+    wclrtoeol(win);
+    waddstr(win, curr->name);
   }
   refresh();
-
-  return 0;
 }
 
 int main() {
   char cwd[PATH_MAX];
   WINDOW * win;
+  struct refs refs = LIST_HEAD_INITIALIZER();
 
   if ((win = initscr()) == NULL) {
     exit(1);
@@ -83,8 +94,10 @@ int main() {
   git_repository_init(&repo, cwd, false);
 
   while (1) {
+    clear_refs(&refs);
+    get_latest_refs(&refs, repo, getmaxx(win));
+    print_refs(win, &refs);
     usleep(10000);
-    print_latest_refs(repo, 5);
   }
 
   delwin(win);
