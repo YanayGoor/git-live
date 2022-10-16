@@ -139,6 +139,40 @@ void print_refs(WINDOW *win, struct refs *refs) {
   wrefresh(win);
 }
 
+void print_latest_commits(WINDOW *win, git_repository *repo, int max) {
+  git_revwalk *walker;
+  git_commit *commit;
+  int line = 0;
+  char hash[6];
+  git_oid next;
+
+  git_revwalk_new(&walker, repo);
+  git_revwalk_push_ref(walker, "HEAD");
+
+  while (git_revwalk_next(&next, walker) != GIT_ITEROVER) {
+    if (git_commit_lookup(&commit, repo, &next)) continue;
+
+    sprintf(hash, "%02x%02x ", next.id[0], next.id[1]);
+
+    wmove(win, line, 0);
+
+    wattr_on(win, WA_DIM, NULL);
+    waddstr(win, hash);
+    wattr_off(win, WA_DIM, NULL);
+
+    waddnstr(win, git_commit_message(commit), getmaxx(win) - 15);
+
+    wmove(win, line, getmaxx(win) - 15);
+    wattr_on(win, WA_DIM, NULL);
+    waddnstr(win, git_commit_committer(commit)->name, 15);
+    wattr_off(win, WA_DIM, NULL);
+
+    git_commit_free(commit);
+    if (++line == max) break;
+  }
+  wrefresh(win);
+}
+
 int main() {
   char cwd[PATH_MAX];
   WINDOW * win;
@@ -156,10 +190,14 @@ int main() {
   git_repository *repo = NULL;
   git_repository_init(&repo, cwd, false);
 
+  WINDOW *topwin = newwin(getmaxy(win) / 2, 0, 0, 0);
+  WINDOW *bottomwin = newwin(getmaxy(win) / 2, 0, getmaxy(win) / 2, 0);
+
   while (1) {
-    get_latest_refs(&refs, repo, getmaxx(win));
-    print_refs(win, &refs);
+    get_latest_refs(&refs, repo, getmaxy(topwin) - 1);
+    print_refs(topwin, &refs);
     clear_refs(&refs);
+    print_latest_commits(bottomwin, repo, getmaxy(bottomwin) - 1);
     usleep(10000);
   }
 
