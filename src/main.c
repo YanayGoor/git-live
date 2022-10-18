@@ -280,6 +280,8 @@ int main() {
   git_repository *repo = NULL;
   git_repository_init(&repo, cwd, false);
 
+  curs_set(0);
+
   WINDOW *topwin = newwin(getmaxy(win) / 3, 0, 0, 0);
   WINDOW *middlewin = newwin(getmaxy(win) / 3, 0, getmaxy(win) / 3, 0);
   WINDOW *bottomwin = newwin(getmaxy(win) / 3, 0, getmaxy(win) * 2 / 3, 0);
