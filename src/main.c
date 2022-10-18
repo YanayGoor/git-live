@@ -154,6 +154,7 @@ void print_latest_commits(WINDOW *win, git_repository *repo, int max) {
 
     sprintf(hash, "%02x%02x ", next.id[0], next.id[1]);
 
+    wclrtoeol(win);
     wmove(win, line, 0);
 
     wattr_on(win, WA_DIM, NULL);
@@ -170,6 +171,95 @@ void print_latest_commits(WINDOW *win, git_repository *repo, int max) {
     git_commit_free(commit);
     if (++line == max) break;
   }
+  wrefresh(win);
+}
+
+void print_status_entry(const git_status_entry *entry, char *buff, size_t len) {
+  const char *status = "";
+  if (entry->status & (GIT_STATUS_INDEX_NEW | GIT_STATUS_WT_NEW)) {
+    status = "new";
+  }
+  else if (entry->status & (GIT_STATUS_INDEX_RENAMED | GIT_STATUS_WT_RENAMED)) {
+    status = "renamed";
+  }
+  else if (entry->status & (GIT_STATUS_INDEX_MODIFIED | GIT_STATUS_WT_MODIFIED)) {
+    status = "modified";
+  }
+  else if (entry->status & (GIT_STATUS_INDEX_DELETED | GIT_STATUS_WT_DELETED)) {
+    status = "deleted";
+  }
+  if (entry->head_to_index) {
+    if (strcmp(entry->head_to_index->new_file.path, entry->head_to_index->old_file.path) != 0) {
+      snprintf(buff, len, "  %s %s->%s", status, entry->head_to_index->old_file.path, entry->head_to_index->new_file.path);
+    } else {
+      snprintf(buff, len, "  %s %s", status, entry->head_to_index->new_file.path);
+    }
+  }
+  if (entry->index_to_workdir) {
+    if (strcmp(entry->index_to_workdir->new_file.path, entry->index_to_workdir->old_file.path) != 0) {
+      snprintf(buff, len, "  %s %s->%s", status, entry->index_to_workdir->old_file.path, entry->index_to_workdir->new_file.path);
+    } else {
+      snprintf(buff, len, "  %s %s", status, entry->index_to_workdir->new_file.path);
+    }
+  }
+}
+
+void print_status(WINDOW *win, git_repository *repo) {
+  char buff[200];
+  git_status_list *status_list;
+  git_status_options opts = {.version = GIT_STATUS_OPTIONS_VERSION, .flags=GIT_STATUS_OPT_INCLUDE_UNTRACKED, .show=GIT_STATUS_SHOW_INDEX_ONLY};
+
+  git_status_list_new(&status_list, repo, &opts);
+
+  int line = 0;
+
+  wmove(win, line++, 0);
+  wclrtoeol(win);
+  waddstr(win, "staged:");
+  for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
+    const git_status_entry *entry = git_status_byindex(status_list, i);
+    wmove(win, line++, 0);
+    print_status_entry(entry, buff, 200);
+    wclrtoeol(win);
+    waddstr(win, buff);
+  }
+  git_status_list_free(status_list);
+
+  opts = (git_status_options){.version = GIT_STATUS_OPTIONS_VERSION, .flags=0, .show=GIT_STATUS_SHOW_WORKDIR_ONLY};
+
+  git_status_list_new(&status_list, repo, &opts);
+
+  wmove(win, line++, 0);
+  wclrtoeol(win);
+  waddstr(win, "not staged:");
+  for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
+    const git_status_entry *entry = git_status_byindex(status_list, i);
+    wmove(win, line++, 0);
+    print_status_entry(entry, buff, 200);
+    wclrtoeol(win);
+    waddstr(win, buff);
+  }
+
+  opts = (git_status_options){.version = GIT_STATUS_OPTIONS_VERSION, .flags=GIT_STATUS_OPT_INCLUDE_UNTRACKED, .show=GIT_STATUS_SHOW_WORKDIR_ONLY};
+
+  git_status_list_free(status_list);
+  git_status_list_new(&status_list, repo, &opts);
+
+  wmove(win, line++, 0);
+  wclrtoeol(win);
+  waddstr(win, "untracked:");
+  for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
+    const git_status_entry *entry = git_status_byindex(status_list, i);
+    if (entry->index_to_workdir && entry->index_to_workdir->status != GIT_DELTA_UNTRACKED) {
+      continue;
+    }
+    wmove(win, line++, 0);
+    print_status_entry(entry, buff, 200);
+    wclrtoeol(win);
+    waddstr(win, buff);
+  }
+
+  git_status_list_free(status_list);
   wrefresh(win);
 }
 
@@ -190,12 +280,14 @@ int main() {
   git_repository *repo = NULL;
   git_repository_init(&repo, cwd, false);
 
-  WINDOW *topwin = newwin(getmaxy(win) / 2, 0, 0, 0);
-  WINDOW *bottomwin = newwin(getmaxy(win) / 2, 0, getmaxy(win) / 2, 0);
+  WINDOW *topwin = newwin(getmaxy(win) / 3, 0, 0, 0);
+  WINDOW *middlewin = newwin(getmaxy(win) / 3, 0, getmaxy(win) / 3, 0);
+  WINDOW *bottomwin = newwin(getmaxy(win) / 3, 0, getmaxy(win) * 2 / 3, 0);
 
   while (1) {
-    get_latest_refs(&refs, repo, getmaxy(topwin) - 1);
-    print_refs(topwin, &refs);
+    print_status(topwin, repo);
+    get_latest_refs(&refs, repo, getmaxy(middlewin) - 1);
+    print_refs(middlewin, &refs);
     clear_refs(&refs);
     print_latest_commits(bottomwin, repo, getmaxy(bottomwin) - 1);
     usleep(10000);
