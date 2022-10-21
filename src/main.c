@@ -20,6 +20,12 @@
 #define COLOR_UNTRACKED 33
 #define COLOR_NOT_STAGED 34
 #define COLOR_STAGED 35
+#define COLOR_TITLE 36
+
+#define COLOR_COMMIT_HASH 37
+#define COLOR_COMMIT_TITLE 38
+#define COLOR_COMMIT_DATE 39
+#define COLOR_COMMIT_USER 40
 
 
 struct ref {
@@ -30,6 +36,20 @@ struct ref {
 
 LIST_HEAD(refs, ref);
 
+void get_human_readable_time(git_time_t t, char *buff, size_t len) {
+  int64_t diff = time(NULL) - t;
+  if (diff < 60) {
+    snprintf(buff, len, "now");
+  } else if (diff < 60 * 60) {
+    snprintf(buff, len, "%ld minutes ago", diff / 60);
+  } else if (diff < 60 * 60 * 24) {
+    snprintf(buff, len, "%ld hours ago", diff / 60 / 60);
+  } else if (diff < 60 * 60 * 24 * 7) {
+    snprintf(buff, len, "%ld days ago", diff / 60 / 60 / 24);
+  } else {
+    snprintf(buff, len, "%ld weeks ago", diff / 60 / 60 / 24 / 7);
+  }
+}
 
 bool is_checkout_reflog(const git_reflog_entry *entry) {
   const char *message = git_reflog_entry_message(entry);
@@ -127,9 +147,11 @@ void print_refs(WINDOW *win, struct refs *refs) {
   size_t max = get_refs_max_width(refs);
 
   LIST_FOREACH(curr, refs, entry) {
+    if (curr->index == 0) continue;
     wmove(win, line, 1);
     wclrtoeol(win);
     waddstr(win, curr->name);
+    wattr_off(win, WA_DIM, NULL);
     if (curr->index) {
       wmove(win, line, max + 2);
       wattr_on(win, WA_DIM, NULL);
@@ -151,6 +173,7 @@ void print_latest_commits(WINDOW *win, git_repository *repo, int max) {
   int first_line_end;
   int line = 1;
   char hash[6];
+  char time[15];
   git_oid next;
 
   git_revwalk_new(&walker, repo);
@@ -165,20 +188,46 @@ void print_latest_commits(WINDOW *win, git_repository *repo, int max) {
     wmove(win, line, 1);
 
     wattr_on(win, WA_DIM, NULL);
+    wcolor_set(win, COLOR_COMMIT_HASH, NULL);
     waddstr(win, hash);
     wattr_off(win, WA_DIM, NULL);
+    wcolor_set(win, 0, NULL);
 
+    wcolor_set(win, COLOR_COMMIT_TITLE, NULL);
     first_line_end = (int)(strchr(git_commit_message(commit), '\n') - git_commit_message(commit));
-    waddnstr(win, git_commit_message(commit), MIN(first_line_end, getmaxx(win) - 15));
+    waddnstr(win, git_commit_message(commit), MIN(first_line_end, getmaxx(win) - 15 - 15));
+    wcolor_set(win, 0, NULL);
 
-    wmove(win, line, getmaxx(win) - 15);
+    wcolor_set(win, COLOR_COMMIT_USER, NULL);
+    wmove(win, line, getmaxx(win) - 15 - 15);
     wattr_on(win, WA_DIM, NULL);
     waddnstr(win, git_commit_committer(commit)->name, 15);
     wattr_off(win, WA_DIM, NULL);
+    wcolor_set(win, 0, NULL);
+
+    wcolor_set(win, COLOR_COMMIT_DATE, NULL);
+    wmove(win, line, getmaxx(win) - 15);
+    get_human_readable_time(git_commit_time(commit), time, 15);
+    waddnstr(win, time, 15);
+    wcolor_set(win, 0, NULL);
 
     git_commit_free(commit);
     if (++line == max) break;
   }
+}
+
+int get_head_name(git_repository *repo, char *buff, size_t len) {
+  int error = 0;
+  git_reference *head = NULL;
+  error = git_repository_head(&head, repo);
+  if (error == GIT_EUNBORNBRANCH || error == GIT_ENOTFOUND)
+    return -1;
+  else if (!error) {
+    strncpy(buff, git_reference_shorthand(head), len);
+    git_reference_free(head);
+    return 0;
+  }
+  return -1;
 }
 
 void print_status_entry(const git_status_entry *entry, char *buff, size_t len) {
@@ -242,7 +291,7 @@ void print_status(WINDOW *win, git_repository *repo) {
 
   wmove(win, line++, 1);
   wclrtoeol(win);
-  waddstr(win, "not staged:");
+  waddstr(win, "changed:");
   wcolor_set(win, COLOR_NOT_STAGED, NULL);
   for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
     const git_status_entry *entry = git_status_byindex(status_list, i);
@@ -280,6 +329,7 @@ void print_status(WINDOW *win, git_repository *repo) {
 
 int main() {
   char cwd[PATH_MAX];
+  char head_name[100];
   WINDOW * win;
   struct refs refs = LIST_HEAD_INITIALIZER();
 
@@ -302,6 +352,11 @@ int main() {
   init_pair(COLOR_STAGED, COLOR_GREEN, -1);
   init_pair(COLOR_NOT_STAGED, COLOR_RED, -1);
   init_pair(COLOR_UNTRACKED, COLOR_RED, -1);
+  init_pair(COLOR_TITLE, COLOR_BLACK, COLOR_WHITE);
+  init_pair(COLOR_COMMIT_HASH, COLOR_BLUE, -1);
+  init_pair(COLOR_COMMIT_TITLE, -1, -1);
+  init_pair(COLOR_COMMIT_DATE, -1, -1);
+  init_pair(COLOR_COMMIT_USER, -1, -1);
 
   int third = getmaxy(win) / 3;
   int leftover = getmaxy(win) - third * 3;
@@ -316,12 +371,35 @@ int main() {
     print_refs(middlewin, &refs);
     clear_refs(&refs);
     print_latest_commits(bottomwin, repo, getmaxy(win) / 3);
+
+    wcolor_set(topwin, COLOR_TITLE, NULL);
+    for (int i = 0; i < getmaxx(topwin); i++) {
+      wmove(topwin, 0, i); waddstr(topwin, " "); }
     wmove(topwin, 0, 0);
-    waddstr(topwin, "status");
+    waddstr(topwin, " Status (");
+    get_head_name(repo, head_name, 100);
+    waddstr(topwin, head_name);
+    waddstr(topwin, ")");
+    wmove(topwin, 0, getmaxx(topwin) / 2 - strlen("Git Live") / 2);
+    waddstr(topwin, "Git Live");
+    wmove(topwin, 0, getmaxx(topwin) - MIN(strlen(cwd), 60) - 1);
+    waddnstr(topwin, cwd, 60);
+    wcolor_set(topwin, 0, NULL);
+
+    wcolor_set(middlewin, COLOR_TITLE, NULL);
+    for (int i = 0; i < getmaxx(middlewin); i++) {
+      wmove(middlewin, 0, i); waddstr(middlewin, " "); }
     wmove(middlewin, 0, 0);
-    waddstr(middlewin, "latest-branches");
+    waddstr(middlewin, " Latest Branches");
+    wcolor_set(middlewin, 0, NULL);
+
+    wcolor_set(bottomwin, COLOR_TITLE, NULL);
+    for (int i = 0; i < getmaxx(bottomwin); i++) {
+      wmove(bottomwin, 0, i); waddstr(bottomwin, " "); }
     wmove(bottomwin, 0, 0);
-    waddstr(bottomwin, "commits");
+    waddstr(bottomwin, " Commits");
+    wcolor_set(bottomwin, 0, NULL);
+
     wrefresh(topwin);
     wrefresh(middlewin);
     wrefresh(bottomwin);
