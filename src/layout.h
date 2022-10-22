@@ -27,6 +27,10 @@ struct node {
   size_t basis;
   size_t expand;
   bool fit_content;
+  size_t padding_top;
+  size_t padding_bottom;
+  size_t padding_left;
+  size_t padding_right;
   enum nodes_direction nodes_direction;
   LIST_HEAD(,node) nodes;
   const char *content;

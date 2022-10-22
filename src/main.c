@@ -1,3 +1,4 @@
+#include "layout.h"
 #include <curses.h>
 #include <git2.h>
 #include <limits.h>
@@ -7,7 +8,6 @@
 #include <string.h>
 #include <sys/queue.h>
 #include <unistd.h>
-#include "layout.h"
 
 #define REFLOG_CO_PREFIX "checkout:"
 
@@ -327,8 +327,8 @@ void print_status(WINDOW *win, git_repository *repo) {
     wcolor_set(win, 0, NULL);
     git_status_list_free(status_list);
 }
-
-//int main() {
+//
+// int main() {
 //  char cwd[PATH_MAX];
 //  char head_name[100];
 //  WINDOW * win;
@@ -414,76 +414,104 @@ void print_status(WINDOW *win, git_repository *repo) {
 //}
 
 int main() {
-    WINDOW * win;
+    WINDOW *win;
 
     if ((win = initscr()) == NULL) {
         exit(1);
     }
 
     curs_set(0);
-  start_color();
-  use_default_colors();
+    start_color();
+    use_default_colors();
 
     struct node node = {
-      .content = NULL,
-      .expand = 1,
-      .basis = 0,
-      .fit_content = false,
-      .nodes_direction = nodes_direction_rows,
-      .nodes = LIST_HEAD_INITIALIZER(blabla),
-  };
-  struct node top = {
-      .content = NULL,
-      .expand = 1,
-      .basis = 0,
-      .fit_content = false,
-      .nodes_direction = nodes_direction_columns,
-      .nodes = LIST_HEAD_INITIALIZER(blabla),
-  };
-  struct node top_1 = {
-      .content = "saaa\naaaa\naaaaaa\naaaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
-      .expand = 0,
-      .basis = 0,
-      .fit_content = true,
-      .nodes_direction = nodes_direction_rows,
-      .nodes = LIST_HEAD_INITIALIZER(blabla),
-  };
-  struct node top_2 = {
-      .content = "saaa\naaa\naaaa\naaaaaaaaaaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
-      .expand = 1,
-      .basis = 0,
-      .fit_content = true,
-      .nodes_direction = nodes_direction_rows,
-      .nodes = LIST_HEAD_INITIALIZER(blabla),
-  };
-  struct node top_3 = {
-      .content = "saaa\naaa\naaaa\naaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
-      .expand = 0,
-      .basis = 0,
-      .fit_content = true,
-      .nodes_direction = nodes_direction_rows,
-      .nodes = LIST_HEAD_INITIALIZER(blabla),
-  };
-  struct node middle = {
-      .content = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      .expand = 2,
-      .basis = 0,
-      .fit_content = false,
-      .nodes_direction = nodes_direction_rows,
-      .nodes = LIST_HEAD_INITIALIZER(blabla),
-  };
-  struct node bottom = {
-      .content = "ccccccccccccc",
-      .expand = 0,
-      .basis = 4,
-      .fit_content = false,
-      .nodes_direction = nodes_direction_rows,
-      .nodes = LIST_HEAD_INITIALIZER(blabla),
+        .content = NULL,
+        .expand = 1,
+        .basis = 0,
+        .fit_content = false,
+        .nodes_direction = nodes_direction_rows,
+        .nodes = LIST_HEAD_INITIALIZER(blabla),
+        .padding_right = 0,
+        .padding_left = 0,
+        .padding_bottom = 0,
+        .padding_top = 0,
+    };
+    struct node top = {
+        .content = NULL,
+        .expand = 1,
+        .basis = 0,
+        .fit_content = false,
+        .nodes_direction = nodes_direction_columns,
+        .nodes = LIST_HEAD_INITIALIZER(blabla),
+        .padding_right = 0,
+        .padding_left = 0,
+        .padding_bottom = 0,
+        .padding_top = 0,
+    };
+    struct node top_1 = {
+        .content = "saaa\naaaa\naaaaaa\naaaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
+        .expand = 0,
+        .basis = 0,
+        .fit_content = true,
+        .nodes_direction = nodes_direction_rows,
+        .nodes = LIST_HEAD_INITIALIZER(blabla),
+        .padding_right = 1,
+        .padding_left = 0,
+        .padding_bottom = 0,
+        .padding_top = 0,
+    };
+    struct node top_2 = {
+        .content = "saaa\naaa\naaaa\naaaaaaaaaaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
+        .expand = 1,
+        .basis = 0,
+        .fit_content = true,
+        .nodes_direction = nodes_direction_rows,
+        .nodes = LIST_HEAD_INITIALIZER(blabla),
+        .padding_right = 1,
+        .padding_left = 0,
+        .padding_bottom = 0,
+        .padding_top = 0,
+    };
+    struct node top_3 = {
+        .content = "saaa\naaa\naaaa\naaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
+        .expand = 1,
+        .basis = 0,
+        .fit_content = true,
+        .nodes_direction = nodes_direction_rows,
+        .nodes = LIST_HEAD_INITIALIZER(blabla),
+        .padding_right = 0,
+        .padding_left = 0,
+        .padding_bottom = 0,
+        .padding_top = 0,
+    };
+    struct node middle = {
+        .content = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        .expand = 2,
+        .basis = 0,
+        .fit_content = false,
+        .nodes_direction = nodes_direction_rows,
+        .nodes = LIST_HEAD_INITIALIZER(blabla),
+        .padding_right = 0,
+        .padding_left = 0,
+        .padding_bottom = 0,
+        .padding_top = 1,
+    };
+    struct node bottom = {
+        .content = "ccccccccccccc",
+        .expand = 0,
+        .basis = 4,
+        .fit_content = false,
+        .nodes_direction = nodes_direction_rows,
+        .nodes = LIST_HEAD_INITIALIZER(blabla),
+        .padding_right = 1,
+        .padding_left = 1,
+        .padding_bottom = 1,
+        .padding_top = 1,
     };
 
     LIST_INSERT_HEAD(&node.nodes, &top, entry);
     LIST_INSERT_AFTER(&top, &middle, entry);
-  LIST_INSERT_AFTER(&middle, &bottom, entry);
+    LIST_INSERT_AFTER(&middle, &bottom, entry);
 
     LIST_INSERT_HEAD(&top.nodes, &top_1, entry);
     LIST_INSERT_AFTER(&top_1, &top_2, entry);
@@ -491,13 +519,12 @@ int main() {
 
     while (1) {
         print_layout(win, &node);
-    wrefresh(win);
+        wrefresh(win);
         usleep(10000);
     }
 
-
-  delwin(win);
-  endwin();
-  refresh();
-  return 0;
+    delwin(win);
+    endwin();
+    refresh();
+    return 0;
 }
