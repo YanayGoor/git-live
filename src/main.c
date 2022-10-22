@@ -424,41 +424,54 @@ int main() {
     start_color();
     use_default_colors();
 
-    struct node node = {
-        .content = NULL,
-        .expand = 1,
-        .basis = 0,
-        .fit_content = false,
-        .nodes_direction = nodes_direction_rows,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 0,
-        .padding_left = 0,
-        .padding_bottom = 0,
-        .padding_top = 0,
-    };
-    struct node top = {
-        .content = NULL,
-        .expand = 1,
-        .basis = 0,
-        .fit_content = false,
-        .nodes_direction = nodes_direction_columns,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 0,
-        .padding_left = 0,
-        .padding_bottom = 0,
-        .padding_top = 0,
-    };
-    struct node top_1 = {
-        .content = "saaa\naaaa\naaaaaa\naaaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
-        .expand = 0,
-        .basis = 0,
-        .fit_content = true,
-        .nodes_direction = nodes_direction_rows,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 1,
-        .padding_left = 0,
-        .padding_bottom = 0,
-        .padding_top = 0,
+    init_pair(COLOR_STAGED, COLOR_GREEN, -1);
+    init_pair(COLOR_NOT_STAGED, COLOR_RED, -1);
+    init_pair(COLOR_UNTRACKED, COLOR_RED, -1);
+    init_pair(COLOR_TITLE, COLOR_BLACK, COLOR_WHITE);
+    init_pair(COLOR_COMMIT_HASH, COLOR_BLUE, -1);
+    init_pair(COLOR_COMMIT_TITLE, -1, -1);
+    init_pair(COLOR_COMMIT_DATE, -1, -1);
+    init_pair(COLOR_COMMIT_USER, -1, -1);
+
+
+  struct node node = {
+      .content = NULL,
+      .expand = 1,
+      .basis = 0,
+      .fit_content = false,
+      .nodes_direction = nodes_direction_rows,
+      .nodes = LIST_HEAD_INITIALIZER(blabla),
+      .padding_right = 0,
+      .padding_left = 0,
+      .padding_bottom = 0,
+      .padding_top = 0,
+  };
+  struct node top = {
+      .content = NULL,
+      .expand = 1,
+      .basis = 0,
+      .fit_content = false,
+      .nodes_direction = nodes_direction_columns,
+      .nodes = LIST_HEAD_INITIALIZER(blabla),
+      .padding_right = 0,
+      .padding_left = 0,
+      .padding_bottom = 0,
+      .padding_top = 0,
+      .color = COLOR_STAGED,
+      .attr = 0,
+  };
+  struct node top_1 = {
+      .content = "saaa\naaaa\naaaaaa\naaaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
+      .expand = 0,
+      .basis = 0,
+      .fit_content = true,
+      .nodes_direction = nodes_direction_rows,
+      .nodes = LIST_HEAD_INITIALIZER(blabla),
+      .padding_right = 1,
+      .padding_left = 0,
+      .padding_bottom = 0,
+      .padding_top = 0,
+      .attr = WA_BOLD,
     };
     struct node top_2 = {
         .content = "saaa\naaa\naaaa\naaaaaaaaaaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",

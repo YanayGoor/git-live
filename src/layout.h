@@ -34,11 +34,12 @@ struct node {
   enum nodes_direction nodes_direction;
   LIST_HEAD(,node) nodes;
   const char *content;
-  const char attr;
-  const char color;
+  attr_t attr;
+  NCURSES_PAIRS_T color;
 };
 
 #define NODES_FOREACH(var, head) LIST_FOREACH(var, head, entry)
+#define TEXT_NODES_FOREACH(var, head) LIST_FOREACH(var, head, entry)
 
 int print_layout(WINDOW *win, struct node *node);
 

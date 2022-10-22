@@ -61,40 +61,45 @@ size_t get_height(struct node *node) {
     return sz;
 }
 
-int _print_layout(WINDOW *win, struct node *node, struct rect rect) {
-    size_t maxsize = node->nodes_direction == nodes_direction_columns ? rect.width : rect.height;
-    size_t weights_sum = 0;
-    size_t chs_sum = 0;
-    size_t contents_sum = 0;
-    size_t weighted_nodes_count = 0;
-    struct node *curr;
-    NODES_FOREACH (curr, &node->nodes) {
-        weights_sum += curr->expand;
-        if (curr->fit_content) {
-            size_t contents_sz = node->nodes_direction == nodes_direction_columns ? get_width(curr) : get_height(curr);
-            contents_sum += contents_sz;
-            chs_sum += curr->basis > contents_sz ? curr->basis - contents_sz : 0;
-        } else {
-            chs_sum += curr->basis;
-        }
-        if (curr->expand)
-            weighted_nodes_count++;
+int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIRS_T color_top, attr_t attr_top) {
+  size_t maxsize = node->nodes_direction == nodes_direction_columns ? rect.width : rect.height;
+  size_t weights_sum = 0;
+  size_t chs_sum = 0;
+  size_t contents_sum = 0;
+  size_t weighted_nodes_count = 0;
+  struct node *curr;
+
+  if (node->attr) wattr_on(win, node->attr, NULL);
+  if (node->color) wcolor_set(win, node->color, NULL);
+
+  NODES_FOREACH(curr, &node->nodes) {
+    weights_sum += curr->expand;
+    if (curr->fit_content) {
+      size_t contents_sz = node->nodes_direction == nodes_direction_columns ? get_width(curr) : get_height(curr);
+      contents_sum += contents_sz;
+      chs_sum += curr->basis > contents_sz ? curr->basis - contents_sz : 0;
+    } else {
+      chs_sum += curr->basis;
     }
-    if (LIST_EMPTY(&node->nodes)) {
-        int width = (int)rect.width - node->padding_left - node->padding_right;
-        const char *curr_line = node->content;
-        const char *next_line;
-        int i = (int)node->padding_top;
-        wmove(win, (int)rect.row + i, (int)(rect.col + node->padding_left));
+    if (curr->expand) weighted_nodes_count++;
+  }
+  if (LIST_EMPTY(&node->nodes)) {
+    int width = (int)rect.width - node->padding_left - node->padding_right;
+    const char *curr_line = node->content;
+    const char *next_line;
+    int row = (int)node->padding_top;
+        int col = (int)(rect.col + node->padding_left);
+
+    wmove(win,  (int)rect.row + row, col);
         while ((next_line = strchr(curr_line, '\n')) != NULL) {
-            wmove(win, (int)rect.row + i, (int)(rect.col + node->padding_left));
+            wmove(win, (int)rect.row + row, col);
             waddnstr(win, curr_line, MIN((int)(next_line - curr_line), width));
             curr_line = next_line + 1;
-            i++;
-            if (i >= (int)rect.height - (int)node->padding_bottom)
+            row++;
+            if (row >= (int)rect.height - (int)node->padding_bottom)
                 break;
         }
-        if (i < (int)rect.height - (int)node->padding_bottom) {
+        if (row < (int)rect.height - (int)node->padding_bottom) {
             waddnstr(win, curr_line, width);
         }
         wmove(win, (int)(rect.row + rect.height - 1), 0);
@@ -110,10 +115,10 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect) {
             if (node->nodes_direction == nodes_direction_columns) {
                 _print_layout(
                     win, curr,
-                    (struct rect){.col = curr_pos, .row = rect.row, .width = final_ch, .height = rect.height});
+                    (struct rect){.col = curr_pos, .row = rect.row, .width = final_ch, .height = rect.height}, node->color, attr_top | node->attr);
             } else {
                 _print_layout(win, curr,
-                              (struct rect){.col = rect.col, .row = curr_pos, .width = rect.width, .height = final_ch});
+                              (struct rect){.col = rect.col, .row = curr_pos, .width = rect.width, .height = final_ch}, node->color, attr_top | node->attr);
             }
             curr_pos += final_ch;
         }
@@ -134,19 +139,22 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect) {
             if (node->nodes_direction == nodes_direction_columns) {
                 _print_layout(
                     win, curr,
-                    (struct rect){.col = curr_pos, .row = rect.row, .width = final_ch, .height = rect.height});
+                    (struct rect){.col = curr_pos, .row = rect.row, .width = final_ch, .height = rect.height}, node->color, attr_top | node->attr);
             } else {
                 _print_layout(win, curr,
-                              (struct rect){.col = rect.col, .row = curr_pos, .width = rect.width, .height = final_ch});
-            }
-            if (curr->expand > 0)
-                curr_weighted_node_index++;
-            curr_pos += final_ch;
-        }
+                              (struct rect){.col = rect.col, .row = curr_pos, .width = rect.width, .height = final_ch}, node->color, attr_top | node->attr);
+      }
+      if (curr->expand > 0) curr_weighted_node_index++;
+      curr_pos += final_ch;
     }
+  }
+
+  if (node->attr && !(node->attr & attr_top)) wattr_off(win, node->attr, NULL);
+  if (node->color) wcolor_set(win, color_top, NULL);
+
     return 0;
 }
 
 int print_layout(WINDOW *win, struct node *node) {
-    return _print_layout(win, node, (struct rect){.col = 0, .row = 0, .width = getmaxx(win), .height = getmaxy(win)});
+    return _print_layout(win, node, (struct rect){.col = 0, .row = 0, .width = getmaxx(win), .height = getmaxy(win)}, 0, 0);
 }
