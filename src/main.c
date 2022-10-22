@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/queue.h>
 #include <unistd.h>
+#include "layout.h"
 
 #define REFLOG_CO_PREFIX "checkout:"
 
@@ -327,93 +328,176 @@ void print_status(WINDOW *win, git_repository *repo) {
     git_status_list_free(status_list);
 }
 
+//int main() {
+//  char cwd[PATH_MAX];
+//  char head_name[100];
+//  WINDOW * win;
+//  struct refs refs = LIST_HEAD_INITIALIZER();
+//
+//  if ((win = initscr()) == NULL) {
+//    exit(1);
+//  }
+//
+//  if (getcwd(cwd, PATH_MAX) == NULL) {
+//    exit(1);
+//  }
+//
+//  git_libgit2_init();
+//  git_repository *repo = NULL;
+//  git_repository_init(&repo, cwd, false);
+//
+//  curs_set(0);
+//  start_color();
+//  use_default_colors();
+//
+//  init_pair(COLOR_STAGED, COLOR_GREEN, -1);
+//  init_pair(COLOR_NOT_STAGED, COLOR_RED, -1);
+//  init_pair(COLOR_UNTRACKED, COLOR_RED, -1);
+//  init_pair(COLOR_TITLE, COLOR_BLACK, COLOR_WHITE);
+//  init_pair(COLOR_COMMIT_HASH, COLOR_BLUE, -1);
+//  init_pair(COLOR_COMMIT_TITLE, -1, -1);
+//  init_pair(COLOR_COMMIT_DATE, -1, -1);
+//  init_pair(COLOR_COMMIT_USER, -1, -1);
+//
+//  int third = getmaxy(win) / 3;
+//  int leftover = getmaxy(win) - third * 3;
+//
+//  WINDOW *topwin = newwin(getmaxy(win) / 3 + (leftover ? 1 : 0), 0, 0, 0);
+//  WINDOW *middlewin = newwin(getmaxy(win) / 3 + (leftover == 2 ? 1 : 0), 0, getmaxy(win) / 3 + (leftover ? 1 : 0), 0);
+//  WINDOW *bottomwin = newwin(getmaxy(win) / 3, 0, getmaxy(win) / 3 * 2  + leftover, 0);
+//
+//  while (1) {
+//    print_status(topwin, repo);
+//    get_latest_refs(&refs, repo, getmaxy(middlewin) - 2);
+//    print_refs(middlewin, &refs);
+//    clear_refs(&refs);
+//    print_latest_commits(bottomwin, repo, getmaxy(win) / 3);
+//
+//    wcolor_set(topwin, COLOR_TITLE, NULL);
+//    for (int i = 0; i < getmaxx(topwin); i++) {
+//      wmove(topwin, 0, i); waddstr(topwin, " "); }
+//    wmove(topwin, 0, 0);
+//    waddstr(topwin, " Status (");
+//    get_head_name(repo, head_name, 100);
+//    waddstr(topwin, head_name);
+//    waddstr(topwin, ")");
+//    wmove(topwin, 0, getmaxx(topwin) / 2 - strlen("Git Live") / 2);
+//    waddstr(topwin, "Git Live");
+//    wmove(topwin, 0, getmaxx(topwin) - MIN(strlen(cwd), 60) - 1);
+//    waddnstr(topwin, cwd, 60);
+//    wcolor_set(topwin, 0, NULL);
+//
+//    wcolor_set(middlewin, COLOR_TITLE, NULL);
+//    for (int i = 0; i < getmaxx(middlewin); i++) {
+//      wmove(middlewin, 0, i); waddstr(middlewin, " "); }
+//    wmove(middlewin, 0, 0);
+//    waddstr(middlewin, " Latest Branches");
+//    wcolor_set(middlewin, 0, NULL);
+//
+//    wcolor_set(bottomwin, COLOR_TITLE, NULL);
+//    for (int i = 0; i < getmaxx(bottomwin); i++) {
+//      wmove(bottomwin, 0, i); waddstr(bottomwin, " "); }
+//    wmove(bottomwin, 0, 0);
+//    waddstr(bottomwin, " Commits");
+//    wcolor_set(bottomwin, 0, NULL);
+//
+//    wrefresh(topwin);
+//    wrefresh(middlewin);
+//    wrefresh(bottomwin);
+//    usleep(10000);
+//  }
+//
+//  delwin(win);
+//  endwin();
+//  refresh();
+//  return 0;
+//}
+
 int main() {
-    char cwd[PATH_MAX];
-    char head_name[100];
-    WINDOW *win;
-    struct refs refs = LIST_HEAD_INITIALIZER();
+    WINDOW * win;
 
     if ((win = initscr()) == NULL) {
         exit(1);
     }
 
-    if (getcwd(cwd, PATH_MAX) == NULL) {
-        exit(1);
-    }
-
-    git_libgit2_init();
-    git_repository *repo = NULL;
-    git_repository_init(&repo, cwd, false);
-
     curs_set(0);
-    start_color();
-    use_default_colors();
+  start_color();
+  use_default_colors();
 
-    init_pair(COLOR_STAGED, COLOR_GREEN, -1);
-    init_pair(COLOR_NOT_STAGED, COLOR_RED, -1);
-    init_pair(COLOR_UNTRACKED, COLOR_RED, -1);
-    init_pair(COLOR_TITLE, COLOR_BLACK, COLOR_WHITE);
-    init_pair(COLOR_COMMIT_HASH, COLOR_BLUE, -1);
-    init_pair(COLOR_COMMIT_TITLE, -1, -1);
-    init_pair(COLOR_COMMIT_DATE, -1, -1);
-    init_pair(COLOR_COMMIT_USER, -1, -1);
+    struct node node = {
+      .content = NULL,
+      .expand = 1,
+      .basis = 0,
+      .fit_content = false,
+      .nodes_direction = nodes_direction_rows,
+      .nodes = LIST_HEAD_INITIALIZER(blabla),
+  };
+  struct node top = {
+      .content = NULL,
+      .expand = 1,
+      .basis = 0,
+      .fit_content = true,
+      .nodes_direction = nodes_direction_columns,
+      .nodes = LIST_HEAD_INITIALIZER(blabla),
+  };
+  struct node top_1 = {
+      .content = "saaa\naaaa\naaaaaa\naaaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
+      .expand = 0,
+      .basis = 0,
+      .fit_content = true,
+      .nodes_direction = nodes_direction_rows,
+      .nodes = LIST_HEAD_INITIALIZER(blabla),
+  };
+  struct node top_2 = {
+      .content = "saaa\naaa\naaaa\naaaaaaaaaaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
+      .expand = 1,
+      .basis = 0,
+      .fit_content = true,
+      .nodes_direction = nodes_direction_rows,
+      .nodes = LIST_HEAD_INITIALIZER(blabla),
+  };
+  struct node top_3 = {
+      .content = "saaa\naaa\naaaa\naaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
+      .expand = 0,
+      .basis = 0,
+      .fit_content = true,
+      .nodes_direction = nodes_direction_rows,
+      .nodes = LIST_HEAD_INITIALIZER(blabla),
+  };
+  struct node middle = {
+      .content = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      .expand = 2,
+      .basis = 0,
+      .fit_content = false,
+      .nodes_direction = nodes_direction_rows,
+      .nodes = LIST_HEAD_INITIALIZER(blabla),
+  };
+  struct node bottom = {
+      .content = "ccccccccccccc",
+      .expand = 0,
+      .basis = 4,
+      .fit_content = false,
+      .nodes_direction = nodes_direction_rows,
+      .nodes = LIST_HEAD_INITIALIZER(blabla),
+    };
 
-    int third = getmaxy(win) / 3;
-    int leftover = getmaxy(win) - third * 3;
+    LIST_INSERT_HEAD(&node.nodes, &top, entry);
+    LIST_INSERT_AFTER(&top, &middle, entry);
+  LIST_INSERT_AFTER(&middle, &bottom, entry);
 
-    WINDOW *topwin = newwin(getmaxy(win) / 3 + (leftover ? 1 : 0), 0, 0, 0);
-    WINDOW *middlewin = newwin(getmaxy(win) / 3 + (leftover == 2 ? 1 : 0), 0, getmaxy(win) / 3 + (leftover ? 1 : 0), 0);
-    WINDOW *bottomwin = newwin(getmaxy(win) / 3, 0, getmaxy(win) / 3 * 2 + leftover, 0);
+    LIST_INSERT_HEAD(&top.nodes, &top_1, entry);
+    LIST_INSERT_AFTER(&top_1, &top_2, entry);
+    LIST_INSERT_AFTER(&top_2, &top_3, entry);
 
     while (1) {
-        print_status(topwin, repo);
-        get_latest_refs(&refs, repo, getmaxy(middlewin) - 2);
-        print_refs(middlewin, &refs);
-        clear_refs(&refs);
-        print_latest_commits(bottomwin, repo, getmaxy(win) / 3);
-
-        wcolor_set(topwin, COLOR_TITLE, NULL);
-        for (int i = 0; i < getmaxx(topwin); i++) {
-            wmove(topwin, 0, i);
-            waddstr(topwin, " ");
-        }
-        wmove(topwin, 0, 0);
-        waddstr(topwin, " Status (");
-        get_head_name(repo, head_name, 100);
-        waddstr(topwin, head_name);
-        waddstr(topwin, ")");
-        wmove(topwin, 0, getmaxx(topwin) / 2 - strlen("Git Live") / 2);
-        waddstr(topwin, "Git Live");
-        wmove(topwin, 0, getmaxx(topwin) - MIN(strlen(cwd), 60) - 1);
-        waddnstr(topwin, cwd, 60);
-        wcolor_set(topwin, 0, NULL);
-
-        wcolor_set(middlewin, COLOR_TITLE, NULL);
-        for (int i = 0; i < getmaxx(middlewin); i++) {
-            wmove(middlewin, 0, i);
-            waddstr(middlewin, " ");
-        }
-        wmove(middlewin, 0, 0);
-        waddstr(middlewin, " Latest Branches");
-        wcolor_set(middlewin, 0, NULL);
-
-        wcolor_set(bottomwin, COLOR_TITLE, NULL);
-        for (int i = 0; i < getmaxx(bottomwin); i++) {
-            wmove(bottomwin, 0, i);
-            waddstr(bottomwin, " ");
-        }
-        wmove(bottomwin, 0, 0);
-        waddstr(bottomwin, " Commits");
-        wcolor_set(bottomwin, 0, NULL);
-
-        wrefresh(topwin);
-        wrefresh(middlewin);
-        wrefresh(bottomwin);
+        print_layout(win, &node);
+    wrefresh(win);
         usleep(10000);
     }
 
-    delwin(win);
-    endwin();
-    refresh();
-    return 0;
+
+  delwin(win);
+  endwin();
+  refresh();
+  return 0;
 }

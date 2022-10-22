@@ -5,12 +5,13 @@ LD = ld
 CFLAGS := -Wall -Wextra -Werror -g
 
 SRC += src/main.c
+SRC += src/layout.c
 OBJ = $(patsubst %.c,%.o,$(SRC))
 
 all: $(NAME)
 
 $(NAME): $(OBJ)
-	$(CC) -o $@ $< -lc -lgit2 -lncurses -ltinfo
+	$(CC) -o $@ $^ -lc -lgit2 -lncurses -ltinfo
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
