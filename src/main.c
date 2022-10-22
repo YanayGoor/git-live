@@ -436,7 +436,7 @@ int main() {
       .content = NULL,
       .expand = 1,
       .basis = 0,
-      .fit_content = true,
+      .fit_content = false,
       .nodes_direction = nodes_direction_columns,
       .nodes = LIST_HEAD_INITIALIZER(blabla),
   };
