@@ -7,19 +7,14 @@
 #include <stdbool.h>
 #include <ncurses.h>
 
-enum unit {
-  unit_ch,
-  unit_percent,
-};
-
-enum overflow {
-  overflow_ellipses,
-  overflow_cut,
-};
-
 enum nodes_direction {
   nodes_direction_columns,
   nodes_direction_rows,
+};
+
+enum node_wrap {
+  node_wrap_nowrap,
+  node_wrap_wrap,
 };
 
 struct node {
@@ -27,6 +22,7 @@ struct node {
   size_t basis;
   size_t expand;
   bool fit_content;
+  enum node_wrap wrap;
   size_t padding_top;
   size_t padding_bottom;
   size_t padding_left;
