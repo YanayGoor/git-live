@@ -459,7 +459,7 @@ int main() {
         .attr = 0,
     };
     struct node top_1 = {
-        .content = "saaa\naaaa\naaaaaa\naaaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
+        .content = "saaa\naaaa\naaaaaa\naaaaa\naaa\naa",
         .expand = 0,
         .basis = 0,
         .fit_content = true,
@@ -472,7 +472,7 @@ int main() {
         .attr = WA_BOLD,
     };
     struct node top_2 = {
-        .content = "saaa\naaa\naaaa\naaaaaaaaaaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
+        .content = "saaa\naaa\naaaa\naaaaaaaaaaaa\n",
         .expand = 1,
         .basis = 0,
         .fit_content = true,
@@ -484,7 +484,7 @@ int main() {
         .padding_top = 0,
     };
     struct node top_3 = {
-        .content = "saaa\naaa\naaaa\naaaa\naaa\naa\naaaa\naaaa\naaaa\na\na\na\na\na",
+        .content = "saaa\naaa\naaaa\n",
         .expand = 1,
         .basis = 0,
         .fit_content = true,
@@ -497,7 +497,7 @@ int main() {
     };
     struct node middle = {
         .content = NULL,
-        .expand = 2,
+        .expand = 1,
         .basis = 0,
         .fit_content = true,
         .nodes_direction = nodes_direction_rows,
@@ -509,7 +509,8 @@ int main() {
         .wrap = node_wrap_wrap,
     };
     struct node middle_1 = {
-        .content = "bbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\n",
+        .content =
+            "bbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\n",
         .expand = 0,
         .basis = 0,
         .fit_content = true,

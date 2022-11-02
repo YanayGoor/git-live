@@ -180,20 +180,18 @@ int _print_layout_line(WINDOW *win, struct nodes *nodes, enum nodes_direction di
                        NCURSES_PAIRS_T color_top, attr_t attr_top) {
     size_t maxsize = direction == nodes_direction_columns ? rect.width : rect.height;
     size_t weights_sum = 0;
-    size_t chs_sum = 0;
-    size_t contents_sum = 0;
     size_t weighted_nodes_count = 0;
     struct node *curr;
 
+    size_t expandsize = maxsize;
     NODES_FOREACH (curr, nodes) {
         weights_sum += curr->expand;
         if (curr->fit_content) {
             size_t contents_sz =
                 direction == nodes_direction_columns ? get_width(curr, rect.height) : get_height(curr, rect.width);
-            contents_sum += contents_sz;
-            chs_sum += curr->basis > contents_sz ? curr->basis - contents_sz : 0;
+            expandsize -= MAX(contents_sz, curr->basis);
         } else {
-            chs_sum += curr->basis;
+            expandsize -= curr->basis;
         }
         if (curr->expand)
             weighted_nodes_count++;
@@ -218,19 +216,30 @@ int _print_layout_line(WINDOW *win, struct nodes *nodes, enum nodes_direction di
             curr_pos += final_ch;
         }
     } else {
-        size_t weight_in_ch = (maxsize - chs_sum - contents_sum) / weights_sum;
-        size_t leftover = maxsize - chs_sum - contents_sum - weight_in_ch * weights_sum;
-        size_t leftover_base = leftover / weighted_nodes_count;
-        size_t leftover_leftover = leftover - leftover_base * weighted_nodes_count;
+        size_t weight_in_ch = expandsize / weights_sum;
         size_t curr_pos = direction == nodes_direction_columns ? rect.col : rect.row;
         size_t curr_weighted_node_index = 0;
+        size_t total_size = 0;
+
+        NODES_FOREACH (curr, nodes) {
+            size_t contents_sz = curr->fit_content
+                                     ? (direction == nodes_direction_columns ? get_width(curr, rect.height)
+                                                                             : get_height(curr, rect.width))
+                                     : 0;
+            total_size += MAX(curr->expand * weight_in_ch + curr->basis, contents_sz);
+        }
+
+        size_t leftover = MAX(maxsize - total_size, 0);
+        size_t leftover_base = leftover / weighted_nodes_count;
+        size_t leftover_leftover = leftover - leftover_base * weighted_nodes_count;
+
         NODES_FOREACH (curr, nodes) {
             size_t contents_sz = curr->fit_content
                                      ? (direction == nodes_direction_columns ? get_width(curr, rect.height)
                                                                              : get_height(curr, rect.width))
                                      : 0;
             size_t final_ch =
-                curr->expand * weight_in_ch + curr->basis + contents_sz +
+                MAX(curr->expand * weight_in_ch + curr->basis, contents_sz) +
                 (curr->expand > 0 ? (leftover_base + ((curr_weighted_node_index < leftover_leftover) ? 1 : 0)) : 0);
             if (direction == nodes_direction_columns) {
                 _print_layout(win, curr,
