@@ -437,7 +437,7 @@ int main() {
         .content = NULL,
         .expand = 1,
         .basis = 0,
-        .fit_content = false,
+        .fit_content = true,
         .nodes_direction = nodes_direction_rows,
         .nodes = LIST_HEAD_INITIALIZER(blabla),
         .padding_right = 0,
@@ -446,7 +446,6 @@ int main() {
         .padding_top = 0,
     };
     struct node top = {
-        .content = NULL,
         .expand = 1,
         .basis = 0,
         .fit_content = false,
@@ -500,7 +499,7 @@ int main() {
         .content = NULL,
         .expand = 2,
         .basis = 0,
-        .fit_content = false,
+        .fit_content = true,
         .nodes_direction = nodes_direction_rows,
         .nodes = LIST_HEAD_INITIALIZER(blabla),
         .padding_right = 0,
@@ -517,7 +516,7 @@ int main() {
         .nodes_direction = nodes_direction_rows,
         .nodes = LIST_HEAD_INITIALIZER(blabla),
         .padding_right = 0,
-        .padding_left = 0,
+        .padding_left = 1,
         .padding_bottom = 0,
         .padding_top = 0,
     };
@@ -529,7 +528,7 @@ int main() {
         .nodes_direction = nodes_direction_rows,
         .nodes = LIST_HEAD_INITIALIZER(blabla),
         .padding_right = 0,
-        .padding_left = 0,
+        .padding_left = 1,
         .padding_bottom = 0,
         .padding_top = 0,
     };
@@ -541,7 +540,7 @@ int main() {
         .nodes_direction = nodes_direction_rows,
         .nodes = LIST_HEAD_INITIALIZER(blabla),
         .padding_right = 0,
-        .padding_left = 0,
+        .padding_left = 1,
         .padding_bottom = 0,
         .padding_top = 0,
     };

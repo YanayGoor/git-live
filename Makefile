@@ -2,7 +2,7 @@ NAME := git-live
 
 CC = gcc
 LD = ld
-CFLAGS := -Wall -Wextra -Werror -g
+CFLAGS := -Wall -Wextra -g
 
 SRC += src/main.c
 SRC += src/layout.c
