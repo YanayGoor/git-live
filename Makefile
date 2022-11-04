@@ -18,4 +18,7 @@ $(NAME): $(OBJ)
 clean:
 	rm -rf $(NAME) $(OBJ)
 
+format:
+	clang-format -i $(SRC)
+
 .PHONY: clean all
