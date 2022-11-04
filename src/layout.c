@@ -6,6 +6,10 @@
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
+#define DIV_OR_ZERO(a, b) ((b) ? (a) / (b) : 0)
+#define SUB_OR_ZERO(a, b) (((a) > (b)) ? (a) - (b) : 0)
+#define OTHER_DIRECTION(dir) ((dir) == nodes_direction_columns ? nodes_direction_rows : nodes_direction_columns)
+
 struct rect {
     size_t col;
     size_t row;
@@ -56,7 +60,6 @@ size_t get_overflow_min_height(struct node *node, size_t max_width) {
             line_width += width;
         }
     } else {
-        //      printf("max width %ld\n", max_width);
         // a c |
         // b d |
         while (1) {
@@ -176,84 +179,65 @@ LIST_HEAD(nodes, node);
 
 int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIRS_T color_top, attr_t attr_top);
 
+#define NODE_MIN_SZ(dir, node, bounds)                                                                                 \
+    (node->fit_content ? ((dir) == nodes_direction_columns ? get_width((node), (bounds).height)                        \
+                                                           : get_height((node), (bounds).width))                       \
+                       : 0)
+
 int _print_layout_line(WINDOW *win, struct nodes *nodes, enum nodes_direction direction, struct rect rect,
                        NCURSES_PAIRS_T color_top, attr_t attr_top) {
-    size_t maxsize = direction == nodes_direction_columns ? rect.width : rect.height;
-    size_t weights_sum = 0;
-    size_t weighted_nodes_count = 0;
+    size_t max_size = direction == nodes_direction_columns ? rect.width : rect.height;
+    size_t min_sizes_sum = 0;
+    size_t expand_sum = 0;
+    size_t expanded_nodes_amount = 0;
     struct node *curr;
 
-    size_t expandsize = maxsize;
     NODES_FOREACH (curr, nodes) {
-        weights_sum += curr->expand;
-        if (curr->fit_content) {
-            size_t contents_sz =
-                direction == nodes_direction_columns ? get_width(curr, rect.height) : get_height(curr, rect.width);
-            expandsize -= MAX(contents_sz, curr->basis);
-        } else {
-            expandsize -= curr->basis;
-        }
+        expand_sum += curr->expand;
+        min_sizes_sum += MAX(NODE_MIN_SZ(direction, curr, rect), curr->basis);
         if (curr->expand)
-            weighted_nodes_count++;
+            expanded_nodes_amount++;
     }
-    if (weighted_nodes_count == 0) {
-        size_t curr_pos = direction == nodes_direction_columns ? rect.col : rect.row;
-        NODES_FOREACH (curr, nodes) {
-            size_t contents_sz = curr->fit_content
-                                     ? (direction == nodes_direction_columns ? get_width(curr, rect.height)
-                                                                             : get_height(curr, rect.width))
-                                     : 0;
-            size_t final_ch = curr->basis + contents_sz;
-            if (direction == nodes_direction_columns) {
-                _print_layout(win, curr,
-                              (struct rect){.col = curr_pos, .row = rect.row, .width = final_ch, .height = rect.height},
-                              color_top, attr_top);
-            } else {
-                _print_layout(win, curr,
-                              (struct rect){.col = rect.col, .row = curr_pos, .width = rect.width, .height = final_ch},
-                              color_top, attr_top);
+
+    // the nodes we get might give us no choice but to overflow
+    max_size = MAX(max_size, min_sizes_sum);
+
+    // calculate how many rows/cols each expand takes.
+    size_t expand_to_chars = DIV_OR_ZERO(max_size - min_sizes_sum, expand_sum);
+
+    // handle int rounding gracefully
+    size_t size_used = 0;
+    NODES_FOREACH (curr, nodes) {
+        size_used += MAX(curr->expand * expand_to_chars + curr->basis, NODE_MIN_SZ(direction, curr, rect));
+    }
+    size_t total_leftover = SUB_OR_ZERO(max_size, size_used);
+    size_t leftover_base = DIV_OR_ZERO(total_leftover, expanded_nodes_amount);
+    size_t leftover_leftover = total_leftover - leftover_base * expanded_nodes_amount;
+
+    size_t curr_pos = direction == nodes_direction_columns ? rect.col : rect.row;
+    size_t curr_weighted_node_index = 0;
+    NODES_FOREACH (curr, nodes) {
+        struct rect inner_rect = rect;
+        size_t curr_size = MAX(curr->expand * expand_to_chars + curr->basis, NODE_MIN_SZ(direction, curr, rect));
+
+        if (curr->expand) {
+            curr_size += leftover_base;
+            if (curr_weighted_node_index < leftover_leftover) {
+                curr_size++;
             }
-            curr_pos += final_ch;
-        }
-    } else {
-        size_t weight_in_ch = expandsize / weights_sum;
-        size_t curr_pos = direction == nodes_direction_columns ? rect.col : rect.row;
-        size_t curr_weighted_node_index = 0;
-        size_t total_size = 0;
-
-        NODES_FOREACH (curr, nodes) {
-            size_t contents_sz = curr->fit_content
-                                     ? (direction == nodes_direction_columns ? get_width(curr, rect.height)
-                                                                             : get_height(curr, rect.width))
-                                     : 0;
-            total_size += MAX(curr->expand * weight_in_ch + curr->basis, contents_sz);
+            curr_weighted_node_index++;
         }
 
-        size_t leftover = MAX(maxsize - total_size, 0);
-        size_t leftover_base = leftover / weighted_nodes_count;
-        size_t leftover_leftover = leftover - leftover_base * weighted_nodes_count;
-
-        NODES_FOREACH (curr, nodes) {
-            size_t contents_sz = curr->fit_content
-                                     ? (direction == nodes_direction_columns ? get_width(curr, rect.height)
-                                                                             : get_height(curr, rect.width))
-                                     : 0;
-            size_t final_ch =
-                MAX(curr->expand * weight_in_ch + curr->basis, contents_sz) +
-                (curr->expand > 0 ? (leftover_base + ((curr_weighted_node_index < leftover_leftover) ? 1 : 0)) : 0);
-            if (direction == nodes_direction_columns) {
-                _print_layout(win, curr,
-                              (struct rect){.col = curr_pos, .row = rect.row, .width = final_ch, .height = rect.height},
-                              color_top, attr_top);
-            } else {
-                _print_layout(win, curr,
-                              (struct rect){.col = rect.col, .row = curr_pos, .width = rect.width, .height = final_ch},
-                              color_top, attr_top);
-            }
-            if (curr->expand > 0)
-                curr_weighted_node_index++;
-            curr_pos += final_ch;
+        if (direction == nodes_direction_columns) {
+            inner_rect.col = curr_pos;
+            inner_rect.width = curr_size;
+        } else {
+            inner_rect.row = curr_pos;
+            inner_rect.height = curr_size;
         }
+
+        _print_layout(win, curr, inner_rect, color_top, attr_top);
+        curr_pos += curr_size;
     }
 
     return 0;
@@ -266,9 +250,9 @@ int _print_layout_content_str(WINDOW *win, const char *content, struct rect rect
     int row = 0;
     int col = 0;
 
-    wmove(win, (int)rect.row + row, rect.col + col);
+    wmove(win, (int)rect.row + row, (int)rect.col + col);
     while ((next_line = strchr(curr_line, '\n')) != NULL) {
-        wmove(win, (int)rect.row + row, rect.col + col);
+        wmove(win, (int)rect.row + row, (int)rect.col + col);
         waddnstr(win, curr_line, MIN((int)(next_line - curr_line), width));
         curr_line = next_line + 1;
         row++;
@@ -278,8 +262,6 @@ int _print_layout_content_str(WINDOW *win, const char *content, struct rect rect
     if (row < (int)rect.height) {
         waddnstr(win, curr_line, width);
     }
-    //    wmove(win, (int)(rect.row + rect.height - 1), (int)rect.col);
-    //    waddstr(win, "end");
     return 0;
 }
 
@@ -318,16 +300,12 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
             if (first == NULL) {
                 break;
             }
-            size_t first_size = node->nodes_direction == nodes_direction_rows ? get_height(first, rect.width)
-                                                                              : get_width(first, rect.height);
-            //            printf("- %ld %ld %ld\n", curr_size, first_size, max_size);
+            size_t first_size = NODE_MIN_SZ(node->nodes_direction, first, rect);
             if ((curr_size + first_size) > max_size && node->wrap == node_wrap_wrap)
                 break;
 
             curr_size += first_size;
-            curr_other_size =
-                MAX(curr_other_size, node->nodes_direction == nodes_direction_rows ? get_width(first, rect.height)
-                                                                                   : get_height(first, rect.width));
+            curr_other_size = MAX(curr_other_size, NODE_MIN_SZ(OTHER_DIRECTION(node->nodes_direction), first, rect));
 
             LIST_REMOVE(first, entry);
             if (last == NULL) {
@@ -340,10 +318,10 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
         }
 
         struct rect inner_line_rect = {
-            .row = inner_rect.row + (node->nodes_direction == nodes_direction_rows ? 0 : prev_other_size),
-            .col = inner_rect.col + (node->nodes_direction == nodes_direction_columns ? 0 : prev_other_size),
-            .height = inner_rect.height - (node->nodes_direction == nodes_direction_rows ? 0 : prev_other_size),
-            .width = inner_rect.width - (node->nodes_direction == nodes_direction_columns ? 0 : prev_other_size),
+            .row = inner_rect.row + (node->nodes_direction == nodes_direction_columns ? prev_other_size : 0),
+            .col = inner_rect.col + (node->nodes_direction == nodes_direction_rows ? prev_other_size : 0),
+            .height = inner_rect.height - (node->nodes_direction == nodes_direction_columns ? prev_other_size : 0),
+            .width = inner_rect.width - (node->nodes_direction == nodes_direction_rows ? prev_other_size : 0),
         };
         _print_layout_line(win, &nodes, node->nodes_direction, inner_line_rect, node->color, attr_top | node->attr);
 
