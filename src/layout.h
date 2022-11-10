@@ -35,7 +35,10 @@ struct node {
 };
 
 #define NODES_FOREACH(var, head) LIST_FOREACH(var, head, entry)
-#define TEXT_NODES_FOREACH(var, head) LIST_FOREACH(var, head, entry)
+#define NODES_FOREACH_N(var, num, node, n) 					\
+	for ((num) = 0, (var) = (node);				\
+		(var) && (num) < (n);							\
+		(var) = LIST_NEXT((var), entry), (num)++)
 
 int print_layout(WINDOW *win, struct node *node);
 

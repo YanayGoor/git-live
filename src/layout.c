@@ -184,15 +184,16 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
                                                            : get_height((node), (bounds).width))                       \
                        : 0)
 
-int _print_layout_line(WINDOW *win, struct nodes *nodes, enum nodes_direction direction, struct rect rect,
+int _print_layout_line(WINDOW *win, struct node *nodes, size_t len, enum nodes_direction direction, struct rect rect,
                        NCURSES_PAIRS_T color_top, attr_t attr_top) {
     size_t max_size = direction == nodes_direction_columns ? rect.width : rect.height;
     size_t min_sizes_sum = 0;
     size_t expand_sum = 0;
     size_t expanded_nodes_amount = 0;
     struct node *curr;
+    size_t i;
 
-    NODES_FOREACH (curr, nodes) {
+    NODES_FOREACH_N (curr, i, nodes, len) {
         expand_sum += curr->expand;
         min_sizes_sum += MAX(NODE_MIN_SZ(direction, curr, rect), curr->basis);
         if (curr->expand)
@@ -207,7 +208,7 @@ int _print_layout_line(WINDOW *win, struct nodes *nodes, enum nodes_direction di
 
     // handle int rounding gracefully
     size_t size_used = 0;
-    NODES_FOREACH (curr, nodes) {
+    NODES_FOREACH_N (curr, i, nodes, len) {
         size_used += MAX(curr->expand * expand_to_chars + curr->basis, NODE_MIN_SZ(direction, curr, rect));
     }
     size_t total_leftover = SUB_OR_ZERO(max_size, size_used);
@@ -216,7 +217,7 @@ int _print_layout_line(WINDOW *win, struct nodes *nodes, enum nodes_direction di
 
     size_t curr_pos = direction == nodes_direction_columns ? rect.col : rect.row;
     size_t curr_weighted_node_index = 0;
-    NODES_FOREACH (curr, nodes) {
+    NODES_FOREACH_N (curr, i, nodes, len) {
         struct rect inner_rect = rect;
         size_t curr_size = MAX(curr->expand * expand_to_chars + curr->basis, NODE_MIN_SZ(direction, curr, rect));
 
@@ -265,12 +266,18 @@ int _print_layout_content_str(WINDOW *win, const char *content, struct rect rect
     return 0;
 }
 
+void clear_list(struct nodes *nodes) {
+    while (LIST_FIRST(nodes) != NULL) {
+        LIST_REMOVE(LIST_FIRST(nodes), entry);
+    }
+}
+
 int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIRS_T color_top, attr_t attr_top) {
     if (node->attr)
         wattr_on(win, node->attr, NULL);
     if (node->color)
         wcolor_set(win, node->color, NULL);
-    struct nodes nodes = LIST_HEAD_INITIALIZER();
+//    struct nodes nodes = LIST_HEAD_INITIALIZER();
 
     struct rect inner_rect = {
         .col = rect.col + node->padding_left,
@@ -286,34 +293,30 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
     // split to lines if warp is true
     size_t max_size = node->nodes_direction == nodes_direction_rows ? rect.height : rect.width;
     size_t prev_other_size = 0;
-    while (true) {
-        struct node *last = NULL;
-        struct node *first = NULL;
+    struct node *first = LIST_FIRST(&node->nodes);
+    struct node *curr = LIST_FIRST(&node->nodes);
+    while (first) {
         size_t curr_size = 0;
         size_t curr_other_size = 0;
-        while (LIST_FIRST(&nodes) != NULL) {
-            LIST_REMOVE(LIST_FIRST(&nodes), entry);
-        }
+        size_t len = 0;
+        struct node *next = curr;
         while (true) {
-            first = LIST_FIRST(&node->nodes);
-
-            if (first == NULL) {
+            size_t first_size = NODE_MIN_SZ(node->nodes_direction, curr, rect);
+            if ((curr_size + first_size) > max_size && node->wrap == node_wrap_wrap) {
                 break;
             }
-            size_t first_size = NODE_MIN_SZ(node->nodes_direction, first, rect);
-            if ((curr_size + first_size) > max_size && node->wrap == node_wrap_wrap)
-                break;
 
             curr_size += first_size;
-            curr_other_size = MAX(curr_other_size, NODE_MIN_SZ(OTHER_DIRECTION(node->nodes_direction), first, rect));
+            curr_other_size = MAX(curr_other_size, NODE_MIN_SZ(OTHER_DIRECTION(node->nodes_direction), curr, rect));
 
-            LIST_REMOVE(first, entry);
-            if (last == NULL) {
-                LIST_INSERT_HEAD(&nodes, first, entry);
-                last = first;
-            } else {
-                LIST_INSERT_AFTER(last, first, entry);
-                last = first;
+            len++;
+            curr = next;
+
+
+            next = LIST_NEXT(curr, entry);
+            if (next == NULL) {
+                curr = next;
+                break;
             }
         }
 
@@ -323,11 +326,14 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
             .height = inner_rect.height - (node->nodes_direction == nodes_direction_columns ? prev_other_size : 0),
             .width = inner_rect.width - (node->nodes_direction == nodes_direction_rows ? prev_other_size : 0),
         };
-        _print_layout_line(win, &nodes, node->nodes_direction, inner_line_rect, node->color, attr_top | node->attr);
+        _print_layout_line(win, first, len, node->nodes_direction, inner_line_rect, node->color, attr_top | node->attr);
 
-        if (first == NULL) {
+        if (curr == NULL) {
+            first = NULL;
             break;
         }
+        curr = LIST_NEXT(curr, entry);
+        first = curr;
         prev_other_size += curr_other_size;
     }
 
