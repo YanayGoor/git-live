@@ -30,9 +30,10 @@ size_t get_str_width(const char *str) {
 }
 
 size_t get_str_height(const char *str) {
-    size_t sz = 0;
+    size_t sz = 1;
     for (size_t i = 0; i < strlen(str); i++) {
-        if (str[i] == '\n') {
+        // TODO: strip trailing newline if there is only whitespace after it
+        if (str[i] == '\n' && i != strlen(str) - 1) {
             sz++;
         }
     }
@@ -134,7 +135,7 @@ size_t get_overflow_min_width(struct node *node, size_t max_height) {
 size_t get_width(struct node *node, size_t max_height) {
     size_t sz = 0;
     struct node *curr;
-    if (LIST_EMPTY(&node->nodes)) {
+    if (node->content) {
         sz = get_str_width(node->content);
     } else if (node->wrap == node_wrap_wrap) {
         return get_overflow_min_width(node, max_height);
@@ -157,7 +158,7 @@ size_t get_width(struct node *node, size_t max_height) {
 size_t get_height(struct node *node, size_t max_width) {
     size_t sz = 0;
     struct node *curr;
-    if (LIST_EMPTY(&node->nodes)) {
+    if (node->content) {
         sz = get_str_height(node->content);
     } else if (node->wrap == node_wrap_wrap) {
         return get_overflow_min_height(node, max_width);
@@ -193,7 +194,7 @@ int _print_layout_line(WINDOW *win, struct node *nodes, size_t len, enum nodes_d
     struct node *curr;
     size_t i;
 
-    NODES_FOREACH_N (curr, i, nodes, len) {
+    NODES_FOREACH_N(curr, i, nodes, len) {
         expand_sum += curr->expand;
         min_sizes_sum += MAX(NODE_MIN_SZ(direction, curr, rect), curr->basis);
         if (curr->expand)
@@ -208,7 +209,7 @@ int _print_layout_line(WINDOW *win, struct node *nodes, size_t len, enum nodes_d
 
     // handle int rounding gracefully
     size_t size_used = 0;
-    NODES_FOREACH_N (curr, i, nodes, len) {
+    NODES_FOREACH_N(curr, i, nodes, len) {
         size_used += MAX(curr->expand * expand_to_chars + curr->basis, NODE_MIN_SZ(direction, curr, rect));
     }
     size_t total_leftover = SUB_OR_ZERO(max_size, size_used);
@@ -217,7 +218,7 @@ int _print_layout_line(WINDOW *win, struct node *nodes, size_t len, enum nodes_d
 
     size_t curr_pos = direction == nodes_direction_columns ? rect.col : rect.row;
     size_t curr_weighted_node_index = 0;
-    NODES_FOREACH_N (curr, i, nodes, len) {
+    NODES_FOREACH_N(curr, i, nodes, len) {
         struct rect inner_rect = rect;
         size_t curr_size = MAX(curr->expand * expand_to_chars + curr->basis, NODE_MIN_SZ(direction, curr, rect));
 
@@ -277,7 +278,6 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
         wattr_on(win, node->attr, NULL);
     if (node->color)
         wcolor_set(win, node->color, NULL);
-//    struct nodes nodes = LIST_HEAD_INITIALIZER();
 
     struct rect inner_rect = {
         .col = rect.col + node->padding_left,
@@ -289,6 +289,10 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
     if (LIST_EMPTY(&node->nodes) && node->content != NULL) {
         _print_layout_content_str(win, node->content, inner_rect);
     }
+//    wmove(win, (int)(rect.row), (int)(rect.col));
+//    waddstr(win, "S");
+//    wmove(win, (int)(rect.row + rect.height), (int)(rect.col + rect.width) - 1);
+//    waddstr(win, "E");
 
     // split to lines if warp is true
     size_t max_size = node->nodes_direction == nodes_direction_rows ? rect.height : rect.width;
@@ -311,7 +315,6 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
 
             len++;
             curr = next;
-
 
             next = LIST_NEXT(curr, entry);
             if (next == NULL) {
@@ -348,4 +351,59 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
 int print_layout(WINDOW *win, struct node *node) {
     return _print_layout(win, node, (struct rect){.col = 0, .row = 0, .width = getmaxx(win), .height = getmaxy(win)}, 0,
                          0);
+}
+
+struct node *init_node(void) {
+    struct node *result = malloc(sizeof(struct node));
+    memset(result, '\0', sizeof(*result));
+    return result;
+}
+
+void append_node(struct node *parent, struct node *child) {
+    if (LIST_EMPTY(&parent->nodes)) {
+        LIST_INSERT_HEAD(&parent->nodes, child, entry);
+    } else {
+        struct node *last = LIST_FIRST(&parent->nodes);
+        while (LIST_NEXT(last, entry)) {
+            last = LIST_NEXT(last, entry);
+        }
+        LIST_INSERT_AFTER(last, child, entry);
+    }
+}
+
+struct node* init_child(struct node *node) {
+    struct node* result = init_node();
+    append_node(node, result);
+    return result;
+}
+
+void append_text(struct node *parent, const char *text) {
+    append_styled_text(parent, text, 0, 0);
+}
+
+void append_styled_text(struct node *parent, const char* text, short color, attr_t attrs) {
+    char *buff = malloc(strlen(text) + 1);
+    strcpy(buff, text);
+
+    struct node *node = init_node();
+    node->content = buff;
+    node->fit_content = true;
+    node->color = color;
+    node->attr = attrs;
+    append_node(parent, node);
+}
+
+void free_node(struct node *node) {
+    if (node->content) {
+        free(node->content);
+    }
+    free(node);
+}
+
+void clear_nodes(struct node *node) {
+    while (!LIST_EMPTY(&node->nodes)) {
+        struct node *elm = LIST_FIRST(&node->nodes);
+        LIST_REMOVE(elm, entry);
+        free_node(elm);
+    }
 }

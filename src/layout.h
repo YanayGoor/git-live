@@ -8,12 +8,13 @@
 #include <ncurses.h>
 
 enum nodes_direction {
+  nodes_direction_none = 0,
   nodes_direction_columns,
   nodes_direction_rows,
 };
 
 enum node_wrap {
-  node_wrap_nowrap,
+  node_wrap_nowrap = 0,
   node_wrap_wrap,
 };
 
@@ -29,7 +30,7 @@ struct node {
   size_t padding_right;
   enum nodes_direction nodes_direction;
   LIST_HEAD(,node) nodes;
-  const char *content;
+  char *content;
   attr_t attr;
   NCURSES_PAIRS_T color;
 };
@@ -41,5 +42,12 @@ struct node {
 		(var) = LIST_NEXT((var), entry), (num)++)
 
 int print_layout(WINDOW *win, struct node *node);
+struct node* init_node(void);
+struct node* init_child(struct node *node);
+void append_text(struct node *parent, const char*);
+void append_styled_text(struct node *parent, const char*, short color, attr_t attrs);
+void append_node(struct node *parent, struct node* child);
+void clear_nodes(struct node *);
+void free_node(struct node *);
 
 #endif // GIT_LIVE_LAYOUT_H

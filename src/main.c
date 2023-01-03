@@ -138,74 +138,81 @@ void get_co_command(char *out, size_t maxlen, size_t index) {
     }
 }
 
-void print_refs(WINDOW *win, struct refs *refs) {
+void print_refs(struct node *node, struct refs *refs) {
     struct ref *curr;
-    int line = 1;
     char buff[CHECKOUT_MAX_LEN];
-    size_t max = get_refs_max_width(refs);
+
+    clear_nodes(node);
+
+    struct node *names = init_child(node);
+    names->nodes_direction = nodes_direction_rows;
+    names->fit_content = true;
+
+    struct node *co_commands = init_child(node);
+    co_commands->nodes_direction = nodes_direction_rows;
+    co_commands->padding_left = 1;
+    co_commands->expand = 1;
 
     LIST_FOREACH(curr, refs, entry) {
         if (curr->index == 0)
             continue;
-        wmove(win, line, 1);
-        wclrtoeol(win);
-        waddstr(win, curr->name);
-        wattr_off(win, WA_DIM, NULL);
+        append_text(names, curr->name);
         if (curr->index) {
-            wmove(win, line, max + 2);
-            wattr_on(win, WA_DIM, NULL);
             get_co_command(buff, CHECKOUT_MAX_LEN, curr->index);
-            waddstr(win, buff);
-            wattr_off(win, WA_DIM, NULL);
+            append_styled_text(co_commands, buff, 0, WA_DIM);
         }
-        line++;
     }
 }
 
-void print_latest_commits(WINDOW *win, git_repository *repo, int max) {
+void print_latest_commits(struct node *node, git_repository *repo, int max) {
     git_revwalk *walker;
     git_commit *commit;
-    int first_line_end;
     int line = 1;
     char hash[6];
-    char time[15];
+    char time[16];
     git_oid next;
 
     git_revwalk_new(&walker, repo);
     git_revwalk_push_ref(walker, "HEAD");
 
+    clear_nodes(node);
+
+    struct node *hash_col = init_child(node);
+    hash_col->fit_content = true;
+    hash_col->nodes_direction = nodes_direction_rows;
+
+    struct node *msg_col = init_child(node);
+    msg_col->expand = 1;
+    msg_col->nodes_direction = nodes_direction_rows;
+    msg_col->padding_left = 1;
+
+    struct node *user_col = init_child(node);
+    user_col->fit_content = true;
+    user_col->nodes_direction = nodes_direction_rows;
+    user_col->padding_left = 1;
+
+    struct node *time_col = init_child(node);
+    time_col->fit_content = true;
+    time_col->nodes_direction = nodes_direction_rows;
+    time_col->padding_left = 1;
+
     while (git_revwalk_next(&next, walker) != GIT_ITEROVER) {
         if (git_commit_lookup(&commit, repo, &next))
             continue;
 
-        sprintf(hash, "%02x%02x ", next.id[0], next.id[1]);
+        sprintf(hash, "%02x%02x", next.id[0], next.id[1]);
 
-        wclrtoeol(win);
-        wmove(win, line, 1);
+        append_styled_text(hash_col, hash, COLOR_COMMIT_HASH, WA_DIM);
 
-        wattr_on(win, WA_DIM, NULL);
-        wcolor_set(win, COLOR_COMMIT_HASH, NULL);
-        waddstr(win, hash);
-        wattr_off(win, WA_DIM, NULL);
-        wcolor_set(win, 0, NULL);
+//        first_line_end = (int)(strchr(git_commit_message(commit), '\n') - git_commit_message(commit));
+//        waddnstr(win, git_commit_message(commit), MIN(first_line_end, getmaxx(win) - 15 - 15));
+//        append_text(node, git_commit_message(commit), MIN(first_line_end, getmaxx(win) - 15 - 15));
+        append_styled_text(msg_col, git_commit_message(commit), COLOR_COMMIT_TITLE, 0);
 
-        wcolor_set(win, COLOR_COMMIT_TITLE, NULL);
-        first_line_end = (int)(strchr(git_commit_message(commit), '\n') - git_commit_message(commit));
-        waddnstr(win, git_commit_message(commit), MIN(first_line_end, getmaxx(win) - 15 - 15));
-        wcolor_set(win, 0, NULL);
+        append_styled_text(user_col, git_commit_committer(commit)->name, COLOR_COMMIT_USER, WA_DIM);
 
-        wcolor_set(win, COLOR_COMMIT_USER, NULL);
-        wmove(win, line, getmaxx(win) - 15 - 15);
-        wattr_on(win, WA_DIM, NULL);
-        waddnstr(win, git_commit_committer(commit)->name, 15);
-        wattr_off(win, WA_DIM, NULL);
-        wcolor_set(win, 0, NULL);
-
-        wcolor_set(win, COLOR_COMMIT_DATE, NULL);
-        wmove(win, line, getmaxx(win) - 15);
         get_human_readable_time(git_commit_time(commit), time, 15);
-        waddnstr(win, time, 15);
-        wcolor_set(win, 0, NULL);
+        append_styled_text(time_col, time, COLOR_COMMIT_DATE, 0);
 
         git_commit_free(commit);
         if (++line == max)
@@ -256,169 +263,80 @@ void print_status_entry(const git_status_entry *entry, char *buff, size_t len) {
     }
 }
 
-void print_status(WINDOW *win, git_repository *repo) {
-    char buff[200];
+void print_status(struct node *node, git_repository *repo) {
+    char buff[200] = {0};
     git_status_list *status_list;
     git_status_options opts = {.version = GIT_STATUS_OPTIONS_VERSION,
                                .flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED,
                                .show = GIT_STATUS_SHOW_INDEX_ONLY};
 
-    git_status_list_new(&status_list, repo, &opts);
+    if (git_status_list_new(&status_list, repo, &opts)) {
+        printf("cannot get status list\n");
+        exit(1);
+    }
 
-    int line = 1;
+    clear_nodes(node);
 
-    wmove(win, line++, 1);
-    wclrtoeol(win);
-    waddstr(win, "staged:");
-    wcolor_set(win, COLOR_STAGED, NULL);
+    append_text(node, "staged:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
         const git_status_entry *entry = git_status_byindex(status_list, i);
-        wmove(win, line++, 1);
         print_status_entry(entry, buff, 200);
-        wclrtoeol(win);
-        waddstr(win, buff);
+        append_styled_text(node, buff, COLOR_STAGED, 0);
     }
-    wcolor_set(win, 0, NULL);
     git_status_list_free(status_list);
-    wmove(win, line++, 0);
-    wclrtoeol(win);
-
     opts =
         (git_status_options){.version = GIT_STATUS_OPTIONS_VERSION, .flags = 0, .show = GIT_STATUS_SHOW_WORKDIR_ONLY};
 
-    git_status_list_new(&status_list, repo, &opts);
+    if (git_status_list_new(&status_list, repo, &opts)) {
+        printf("cannot get status list\n");
+        exit(1);
+    }
 
-    wmove(win, line++, 1);
-    wclrtoeol(win);
-    waddstr(win, "changed:");
-    wcolor_set(win, COLOR_NOT_STAGED, NULL);
+    append_text(node, "changed:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
         const git_status_entry *entry = git_status_byindex(status_list, i);
-        wmove(win, line++, 1);
         print_status_entry(entry, buff, 200);
-        wclrtoeol(win);
-        waddstr(win, buff);
+        append_styled_text(node, buff, COLOR_NOT_STAGED, 0);
     }
-    wcolor_set(win, 0, NULL);
-    wmove(win, line++, 0);
-    wclrtoeol(win);
     git_status_list_free(status_list);
 
     opts = (git_status_options){.version = GIT_STATUS_OPTIONS_VERSION,
                                 .flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED,
                                 .show = GIT_STATUS_SHOW_WORKDIR_ONLY};
 
-    git_status_list_new(&status_list, repo, &opts);
-
-    wmove(win, line++, 1);
-    wclrtoeol(win);
-    waddstr(win, "untracked:");
-    wcolor_set(win, COLOR_UNTRACKED, NULL);
+    if (git_status_list_new(&status_list, repo, &opts)) {
+        printf("cannot get status list\n");
+        exit(1);
+    }
+    append_text(node, "untracked:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
         const git_status_entry *entry = git_status_byindex(status_list, i);
         if (entry->index_to_workdir && entry->index_to_workdir->status != GIT_DELTA_UNTRACKED) {
             continue;
         }
-        wmove(win, line++, 1);
         print_status_entry(entry, buff, 200);
-        wclrtoeol(win);
-        waddstr(win, buff);
+        append_styled_text(node, buff, COLOR_UNTRACKED, 0);
     }
-    wcolor_set(win, 0, NULL);
     git_status_list_free(status_list);
 }
-//
-// int main() {
-//  char cwd[PATH_MAX];
-//  char head_name[100];
-//  WINDOW * win;
-//  struct refs refs = LIST_HEAD_INITIALIZER();
-//
-//  if ((win = initscr()) == NULL) {
-//    exit(1);
-//  }
-//
-//  if (getcwd(cwd, PATH_MAX) == NULL) {
-//    exit(1);
-//  }
-//
-//  git_libgit2_init();
-//  git_repository *repo = NULL;
-//  git_repository_init(&repo, cwd, false);
-//
-//  curs_set(0);
-//  start_color();
-//  use_default_colors();
-//
-//  init_pair(COLOR_STAGED, COLOR_GREEN, -1);
-//  init_pair(COLOR_NOT_STAGED, COLOR_RED, -1);
-//  init_pair(COLOR_UNTRACKED, COLOR_RED, -1);
-//  init_pair(COLOR_TITLE, COLOR_BLACK, COLOR_WHITE);
-//  init_pair(COLOR_COMMIT_HASH, COLOR_BLUE, -1);
-//  init_pair(COLOR_COMMIT_TITLE, -1, -1);
-//  init_pair(COLOR_COMMIT_DATE, -1, -1);
-//  init_pair(COLOR_COMMIT_USER, -1, -1);
-//
-//  int third = getmaxy(win) / 3;
-//  int leftover = getmaxy(win) - third * 3;
-//
-//  WINDOW *topwin = newwin(getmaxy(win) / 3 + (leftover ? 1 : 0), 0, 0, 0);
-//  WINDOW *middlewin = newwin(getmaxy(win) / 3 + (leftover == 2 ? 1 : 0), 0, getmaxy(win) / 3 + (leftover ? 1 : 0), 0);
-//  WINDOW *bottomwin = newwin(getmaxy(win) / 3, 0, getmaxy(win) / 3 * 2  + leftover, 0);
-//
-//  while (1) {
-//    print_status(topwin, repo);
-//    get_latest_refs(&refs, repo, getmaxy(middlewin) - 2);
-//    print_refs(middlewin, &refs);
-//    clear_refs(&refs);
-//    print_latest_commits(bottomwin, repo, getmaxy(win) / 3);
-//
-//    wcolor_set(topwin, COLOR_TITLE, NULL);
-//    for (int i = 0; i < getmaxx(topwin); i++) {
-//      wmove(topwin, 0, i); waddstr(topwin, " "); }
-//    wmove(topwin, 0, 0);
-//    waddstr(topwin, " Status (");
-//    get_head_name(repo, head_name, 100);
-//    waddstr(topwin, head_name);
-//    waddstr(topwin, ")");
-//    wmove(topwin, 0, getmaxx(topwin) / 2 - strlen("Git Live") / 2);
-//    waddstr(topwin, "Git Live");
-//    wmove(topwin, 0, getmaxx(topwin) - MIN(strlen(cwd), 60) - 1);
-//    waddnstr(topwin, cwd, 60);
-//    wcolor_set(topwin, 0, NULL);
-//
-//    wcolor_set(middlewin, COLOR_TITLE, NULL);
-//    for (int i = 0; i < getmaxx(middlewin); i++) {
-//      wmove(middlewin, 0, i); waddstr(middlewin, " "); }
-//    wmove(middlewin, 0, 0);
-//    waddstr(middlewin, " Latest Branches");
-//    wcolor_set(middlewin, 0, NULL);
-//
-//    wcolor_set(bottomwin, COLOR_TITLE, NULL);
-//    for (int i = 0; i < getmaxx(bottomwin); i++) {
-//      wmove(bottomwin, 0, i); waddstr(bottomwin, " "); }
-//    wmove(bottomwin, 0, 0);
-//    waddstr(bottomwin, " Commits");
-//    wcolor_set(bottomwin, 0, NULL);
-//
-//    wrefresh(topwin);
-//    wrefresh(middlewin);
-//    wrefresh(bottomwin);
-//    usleep(10000);
-//  }
-//
-//  delwin(win);
-//  endwin();
-//  refresh();
-//  return 0;
-//}
 
 int main() {
+    char cwd[PATH_MAX];
+    char head_name[100];
     WINDOW *win;
+    struct refs refs = LIST_HEAD_INITIALIZER();
 
     if ((win = initscr()) == NULL) {
         exit(1);
     }
+
+    if (getcwd(cwd, PATH_MAX) == NULL) {
+        exit(1);
+    }
+
+    git_libgit2_init();
+    git_repository *repo = NULL;
+    git_repository_init(&repo, cwd, false);
 
     curs_set(0);
     start_color();
@@ -433,148 +351,86 @@ int main() {
     init_pair(COLOR_COMMIT_DATE, -1, -1);
     init_pair(COLOR_COMMIT_USER, -1, -1);
 
-    struct node node = {
-        .content = NULL,
-        .expand = 1,
-        .basis = 0,
-        .fit_content = true,
-        .nodes_direction = nodes_direction_rows,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 0,
-        .padding_left = 0,
-        .padding_bottom = 0,
-        .padding_top = 0,
-    };
-    struct node top = {
-        .expand = 1,
-        .basis = 0,
-        .fit_content = false,
-        .nodes_direction = nodes_direction_columns,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 0,
-        .padding_left = 0,
-        .padding_bottom = 0,
-        .padding_top = 0,
-        .color = COLOR_STAGED,
-        .attr = 0,
-    };
-    struct node top_1 = {
-        .content = "saaa\naaaa\naaaaaa\naaaaa\naaa\naa\naaaa\naaaaaa\naaaaa\naaa\naa\naaaa\naaaaaa\naaaaa\naaa\naa\naaa"
-                   "a\naaaaaa\naaaaa\naaa\naa",
-        .expand = 0,
-        .basis = 0,
-        .fit_content = true,
-        .nodes_direction = nodes_direction_rows,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 1,
-        .padding_left = 0,
-        .padding_bottom = 0,
-        .padding_top = 0,
-        .attr = WA_BOLD,
-    };
-    struct node top_2 = {
-        .content = "saaa\naaa\naaaa\naaaaaaaaaaaa\n",
-        .expand = 1,
-        .basis = 0,
-        .fit_content = true,
-        .nodes_direction = nodes_direction_rows,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 1,
-        .padding_left = 0,
-        .padding_bottom = 0,
-        .padding_top = 0,
-    };
-    struct node top_3 = {
-        .content = "saaa\naaa\naaaa\n",
-        .expand = 1,
-        .basis = 0,
-        .fit_content = true,
-        .nodes_direction = nodes_direction_rows,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 0,
-        .padding_left = 0,
-        .padding_bottom = 0,
-        .padding_top = 0,
-    };
-    struct node middle = {
-        .content = NULL,
-        .expand = 3,
-        .basis = 0,
-        .fit_content = true,
-        .nodes_direction = nodes_direction_rows,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 0,
-        .padding_left = 0,
-        .padding_bottom = 0,
-        .padding_top = 1,
-        .wrap = node_wrap_wrap,
-    };
-    struct node middle_1 = {
-        .content = "bbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\n",
-        .expand = 0,
-        .basis = 0,
-        .fit_content = true,
-        .nodes_direction = nodes_direction_rows,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 0,
-        .padding_left = 1,
-        .padding_bottom = 0,
-        .padding_top = 0,
-    };
-    struct node middle_2 = {
-        .content = "cccc\ncccc\ncccc\ncccc\ncccc\ncccc\ncccc\ncccc\n",
-        .expand = 0,
-        .basis = 0,
-        .fit_content = true,
-        .nodes_direction = nodes_direction_rows,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 0,
-        .padding_left = 1,
-        .padding_bottom = 0,
-        .padding_top = 0,
-    };
-    struct node middle_3 = {
-        .content = "dddd\ndddd\ndddd\ndddd\ndddd\ndddd\ndddd\ndddd\n",
-        .expand = 0,
-        .basis = 0,
-        .fit_content = true,
-        .nodes_direction = nodes_direction_rows,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 0,
-        .padding_left = 1,
-        .padding_bottom = 0,
-        .padding_top = 0,
-    };
+    struct node *root = init_node();
+    root->expand = 1;
+    root->fit_content = true;
+    root->nodes_direction = nodes_direction_rows;
 
-    struct node bottom = {
-        .content = "ccccccccccccc",
-        .expand = 0,
-        .basis = 4,
-        .fit_content = false,
-        .nodes_direction = nodes_direction_rows,
-        .nodes = LIST_HEAD_INITIALIZER(blabla),
-        .padding_right = 1,
-        .padding_left = 1,
-        .padding_bottom = 1,
-        .padding_top = 1,
-    };
+    struct node *top_header = init_child(root);
+    top_header->basis = 1;
+    top_header->padding_left = 1;
+    top_header->nodes_direction = nodes_direction_columns;
+    top_header->color = COLOR_TITLE;
 
-    LIST_INSERT_HEAD(&node.nodes, &top, entry);
-    LIST_INSERT_AFTER(&top, &middle, entry);
-    LIST_INSERT_AFTER(&middle, &bottom, entry);
+    struct node *top = init_child(root);
+    top->expand = 1;
+    top->nodes_direction = nodes_direction_rows;
+    top->wrap = node_wrap_wrap;
+    top->fit_content = true;
 
-    LIST_INSERT_HEAD(&top.nodes, &top_1, entry);
-    LIST_INSERT_AFTER(&top_1, &top_2, entry);
-    LIST_INSERT_AFTER(&top_2, &top_3, entry);
+    struct node *middle_header = init_child(root);
+    middle_header->basis = 1;
+    middle_header->padding_left = 1;
+    middle_header->color = COLOR_TITLE;
 
-    LIST_INSERT_HEAD(&middle.nodes, &middle_1, entry);
-    LIST_INSERT_AFTER(&middle_1, &middle_2, entry);
-    LIST_INSERT_AFTER(&middle_2, &middle_3, entry);
+    struct node *middle = init_child(root);
+    middle->expand = 1;
+    middle->nodes_direction = nodes_direction_columns;
+
+    struct node *bottom_header = init_child(root);
+    bottom_header->basis = 1;
+    bottom_header->padding_left = 1;
+    bottom_header->color = COLOR_TITLE;
+
+    struct node *bottom = init_child(root);
+    bottom->expand = 1;
+    bottom->nodes_direction = nodes_direction_columns;
 
     while (1) {
-        print_layout(win, &node);
+        print_status(top, repo);
+
+        get_latest_refs(&refs, repo, getmaxy(win) - 2); // we get more and some will be hidden
+        print_refs(middle, &refs);
+        clear_refs(&refs);
+
+        print_latest_commits(bottom, repo, getmaxy(win) / 3);
+
+        clear_nodes(top_header);
+        clear_nodes(middle_header);
+        clear_nodes(bottom_header);
+
+        get_head_name(repo, head_name, 100);
+
+        struct node* status = init_child(top_header);
+        status->fit_content = true;
+        append_text(status, "Status");
+
+        struct node* branch = init_child(top_header);
+        branch->expand = 1;
+        branch->padding_left = 1;
+        branch->nodes_direction = nodes_direction_columns;
+        append_text(branch, "(");
+        append_text(branch, head_name);
+        append_text(branch, ")");
+
+        struct node* title = init_child(top_header);
+        title->fit_content = true;
+        title->padding_left = 1;
+        title->padding_right = 1;
+        append_text(title, "Git Live");
+
+        struct node* padding = init_child(top_header);
+        padding->expand = 1;
+
+        append_text(top_header, cwd);
+
+        append_text(middle_header, "Latest Branches");
+        append_text(bottom_header, "Commits");
+
+        wclear(win);
+        print_layout(win, root);
         wrefresh(win);
-        usleep(10000);
+        usleep(100000);
     }
 
     delwin(win);
@@ -582,3 +438,156 @@ int main() {
     refresh();
     return 0;
 }
+
+// int main() {
+//     WINDOW *win;
+//
+//     if ((win = initscr()) == NULL) {
+//         exit(1);
+//     }
+//
+//     curs_set(0);
+//     start_color();
+//     use_default_colors();
+//
+//     init_pair(COLOR_STAGED, COLOR_GREEN, -1);
+//     init_pair(COLOR_NOT_STAGED, COLOR_RED, -1);
+//     init_pair(COLOR_UNTRACKED, COLOR_RED, -1);
+//     init_pair(COLOR_TITLE, COLOR_BLACK, COLOR_WHITE);
+//     init_pair(COLOR_COMMIT_HASH, COLOR_BLUE, -1);
+//     init_pair(COLOR_COMMIT_TITLE, -1, -1);
+//     init_pair(COLOR_COMMIT_DATE, -1, -1);
+//     init_pair(COLOR_COMMIT_USER, -1, -1);
+//
+//     struct node *root = init_node();
+//     root->expand = 1;
+//     root->fit_content = true;
+//     root->nodes_direction = nodes_direction_rows;
+//
+//     struct node *top = init_node();
+//     top->expand = 1;
+//     top->nodes_direction = nodes_direction_columns;
+//     top->color = COLOR_STAGED;
+//     top->attr = 0;
+//
+//     struct node *top_left = init_node();
+//     top_left->content =
+//     "saaa\naaaa\naaaaaa\naaaaa\naaa\naa\naaaa\naaaaaa\naaaaa\naaa\naa\naaaa\naaaaaa\naaaaa\naaa\naa\naaa"
+//                     "a\naaaaaa\naaaaa\naaa\naa";
+//     top_left->fit_content = true;
+//     top_left->padding_right = 1;
+//     top_left->attr = WA_BOLD;
+//
+//     struct node *top_middle = init_node();
+//     top_middle->content = "saaa\naaa\naaaa\naaaaaaaaaaaa\n";
+//     top_middle->expand = 1;
+//     top_middle->fit_content = true;
+//
+//     struct node *top_right = init_node();
+//     top_right->content = "saaa\naaa\naaaa\n";
+//     top_right->expand = 1;
+//     top_right->fit_content = true;
+//
+//     append_node(top, top_left);
+//     append_node(top, top_middle);
+//     append_node(top, top_right);
+//
+//     struct node *middle = init_node();
+//     middle->expand = 3;
+//     middle->fit_content = true;
+//     middle->nodes_direction = nodes_direction_rows;
+//     middle->padding_top = 1;
+//     middle->wrap = node_wrap_wrap;
+//
+//     struct node *middle_top = init_node();
+//     middle_top->content = "bbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\nbbbb\n";
+//     middle_top->fit_content = true;
+//     middle_top->padding_left = 1;
+//
+////    struct node *middle_top = init_node();
+////    middle_top->nodes_direction = nodes_direction_rows;
+////    middle_top->fit_content = true;
+////    middle_top->padding_left = 1;
+//
+////    struct node *middle_top_1 = init_node();
+////    middle_top_1->content = "bbbb\n";
+////    middle_top_1->fit_content = true;
+////    struct node *middle_top_2 = init_node();
+////    middle_top_2->content = "bbbb\n";
+////    middle_top_2->fit_content = true;
+////    struct node *middle_top_3 = init_node();
+////    middle_top_3->content = "bbbb\n";
+////    middle_top_3->fit_content = true;
+////    struct node *middle_top_4 = init_node();
+////    middle_top_4->content = "bbbb\n";
+////    middle_top_4->fit_content = true;
+////    struct node *middle_top_5 = init_node();
+////    middle_top_5->content = "bbbb\n";
+////    middle_top_5->fit_content = true;
+////    struct node *middle_top_6 = init_node();
+////    middle_top_6->content = "bbbb\n";
+////    middle_top_6->fit_content = true;
+////    struct node *middle_top_7 = init_node();
+////    middle_top_7->content = "bbbb\n";
+////    middle_top_7->fit_content = true;
+////    struct node *middle_top_8 = init_node();
+////    middle_top_8->content = "bbbb\n";
+////    middle_top_8->fit_content = true;
+////
+////    append_node(middle_top, middle_top_1);
+////    append_node(middle_top, middle_top_2);
+////    append_node(middle_top, middle_top_3);
+////    append_node(middle_top, middle_top_4);
+////    append_node(middle_top, middle_top_5);
+////    append_node(middle_top, middle_top_6);
+////    append_node(middle_top, middle_top_7);
+////    append_node(middle_top, middle_top_8);
+//
+//    struct node *middle_middle = init_node();
+////    middle_middle->content = "cccc\ncccc\ncccc\ncccc\ncccc\ncccc\ncccc\ncccc\n";
+//    middle_middle->content = NULL;
+//    middle_middle->nodes_direction = nodes_direction_rows;
+//    middle_middle->fit_content = true;
+//    middle_middle->padding_left = 1;
+//
+//    append_text(middle_middle, "cccc");
+//    append_text(middle_middle, "cccc");
+//    append_text(middle_middle, "cccc");
+//    append_text(middle_middle, "cccc");
+//    append_text(middle_middle, "cccc");
+//    append_text(middle_middle, "cccc");
+//    append_text(middle_middle, "cccc");
+//    append_text(middle_middle, "cccc");
+//
+//    struct node *middle_bottom = init_node();
+//    middle_bottom->content = "dddd\ndddd\ndddd\ndddd\ndddd\ndddd\ndddd\ndddd\n";
+//    middle_bottom->fit_content = true;
+//    middle_bottom->padding_left = 1;
+//
+//    append_node(middle, middle_top);
+//    append_node(middle, middle_middle);
+//    append_node(middle, middle_bottom);
+//
+//    struct node *bottom = init_node();
+//    bottom->content = "ccccccccccccc";
+//    bottom->basis = 4;
+//    bottom->padding_right = 1;
+//    bottom->padding_left = 1;
+//    bottom->padding_bottom = 1;
+//    bottom->padding_top = 1;
+//
+//    append_node(root, top);
+//    append_node(root, middle);
+//    append_node(root, bottom);
+//
+//    while (1) {
+//        print_layout(win, root);
+//        wrefresh(win);
+//        usleep(10000);
+//    }
+//
+//    delwin(win);
+//    endwin();
+//    refresh();
+//    return 0;
+//}
