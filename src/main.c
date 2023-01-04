@@ -147,10 +147,11 @@ void print_refs(struct node *node, struct refs *refs) {
     struct node *names = init_child(node);
     names->nodes_direction = nodes_direction_rows;
     names->fit_content = true;
+    names->basis = 15;
 
     struct node *co_commands = init_child(node);
     co_commands->nodes_direction = nodes_direction_rows;
-    co_commands->padding_left = 1;
+    co_commands->padding_left = 4;
     co_commands->expand = 1;
 
     LIST_FOREACH(curr, refs, entry) {
@@ -195,6 +196,7 @@ void print_latest_commits(struct node *node, git_repository *repo, int max) {
     time_col->fit_content = true;
     time_col->nodes_direction = nodes_direction_rows;
     time_col->padding_left = 1;
+    time_col->padding_right = 1;
 
     while (git_revwalk_next(&next, walker) != GIT_ITEROVER) {
         if (git_commit_lookup(&commit, repo, &next))
@@ -366,6 +368,7 @@ int main() {
     top->expand = 1;
     top->nodes_direction = nodes_direction_rows;
     top->wrap = node_wrap_wrap;
+    top->padding_left = 1;
     top->fit_content = true;
 
     struct node *middle_header = init_child(root);
@@ -376,6 +379,7 @@ int main() {
     struct node *middle = init_child(root);
     middle->expand = 1;
     middle->nodes_direction = nodes_direction_columns;
+    middle->padding_left = 1;
 
     struct node *bottom_header = init_child(root);
     bottom_header->basis = 1;
@@ -385,6 +389,7 @@ int main() {
     struct node *bottom = init_child(root);
     bottom->expand = 1;
     bottom->nodes_direction = nodes_direction_columns;
+    bottom->padding_left = 1;
 
     while (1) {
         print_status(top, repo);
@@ -401,17 +406,9 @@ int main() {
 
         get_head_name(repo, head_name, 100);
 
-        struct node* status = init_child(top_header);
-        status->fit_content = true;
-        append_text(status, "Status");
-
-        struct node* branch = init_child(top_header);
-        branch->expand = 1;
-        branch->padding_left = 1;
-        branch->nodes_direction = nodes_direction_columns;
-        append_text(branch, "(");
-        append_text(branch, head_name);
-        append_text(branch, ")");
+        struct node* top_header_left = init_child(top_header);
+        top_header_left->expand = 1;
+        top_header_left->nodes_direction = nodes_direction_columns;
 
         struct node* title = init_child(top_header);
         title->fit_content = true;
@@ -419,10 +416,27 @@ int main() {
         title->padding_right = 1;
         append_text(title, "Git Live");
 
-        struct node* padding = init_child(top_header);
+        struct node* top_header_right = init_child(top_header);
+        top_header_right->expand = 1;
+        top_header_right->nodes_direction = nodes_direction_columns;
+
+        struct node* status = init_child(top_header_left);
+        status->fit_content = true;
+        append_text(top_header_left, "Status");
+
+        struct node* branch = init_child(top_header_left);
+        branch->expand = 1;
+        branch->padding_left = 1;
+        branch->nodes_direction = nodes_direction_columns;
+        append_text(branch, "(");
+        append_text(branch, head_name);
+        append_text(branch, ")");
+
+
+        struct node* padding = init_child(top_header_right);
         padding->expand = 1;
 
-        append_text(top_header, cwd);
+        append_text(top_header_right, cwd);
 
         append_text(middle_header, "Latest Branches");
         append_text(bottom_header, "Commits");
@@ -430,7 +444,7 @@ int main() {
         wclear(win);
         print_layout(win, root);
         wrefresh(win);
-        usleep(100000);
+        usleep(50000);
     }
 
     delwin(win);
