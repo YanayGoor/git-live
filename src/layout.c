@@ -274,10 +274,12 @@ void clear_list(struct nodes *nodes) {
 }
 
 int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIRS_T color_top, attr_t attr_top) {
-    if (node->attr)
+    if (node->attr) {
         wattr_on(win, node->attr, NULL);
-    if (node->color)
+    }
+    if (node->color) {
         wcolor_set(win, node->color, NULL);
+    }
 
     struct rect inner_rect = {
         .col = rect.col + node->padding_left,
@@ -285,6 +287,14 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
         .height = rect.height - node->padding_bottom - node->padding_top,
         .width = rect.width - node->padding_right - node->padding_left,
     };
+
+
+    if (node->color) {
+        WINDOW *tempwin = subwin(win, rect.height, rect.width, rect.row, rect.col);
+        wbkgd(tempwin, COLOR_PAIR(node->color));
+        wrefresh(tempwin);
+        delwin(tempwin);
+    }
 
     if (LIST_EMPTY(&node->nodes) && node->content != NULL) {
         _print_layout_content_str(win, node->content, inner_rect);
