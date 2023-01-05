@@ -253,11 +253,10 @@ int _print_layout_content_str(WINDOW *win, const char *content, struct rect rect
     const char *curr_line = content;
     const char *next_line;
     int row = 0;
-    int col = 0;
 
-    wmove(win, (int)rect.row + row, (int)rect.col + col);
+    wmove(win, (int)rect.row + row, (int)rect.col);
     while ((next_line = strchr(curr_line, '\n')) != NULL) {
-        wmove(win, (int)rect.row + row, (int)rect.col + col);
+        wmove(win, (int)rect.row + row, (int)rect.col);
         waddnstr(win, curr_line, MIN((int)(next_line - curr_line), width));
         curr_line = next_line + 1;
         row++;
@@ -339,13 +338,14 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
         struct rect inner_line_rect = {
             .row = inner_rect.row + (node->nodes_direction == nodes_direction_columns ? prev_other_size : 0),
             .col = inner_rect.col + (node->nodes_direction == nodes_direction_rows ? prev_other_size : 0),
-            .height = inner_rect.height - (node->nodes_direction == nodes_direction_columns ? prev_other_size : 0),
-            .width = inner_rect.width - (node->nodes_direction == nodes_direction_rows ? prev_other_size : 0),
+            // if the line is not the last, take the minimum size of it.
+            .height = curr != NULL ? node->nodes_direction == nodes_direction_columns ? curr_other_size : inner_rect.height : inner_rect.height,
+            .width = curr != NULL ? node->nodes_direction == nodes_direction_rows ? curr_other_size : inner_rect.width : inner_rect.width,
         };
         _print_layout_line(win, first, len, node->nodes_direction, inner_line_rect, node->color, attr_top | node->attr);
 
         if (curr == NULL) {
-            first = NULL;
+//            first = NULL;
             break;
         }
         curr = LIST_NEXT(curr, entry);
