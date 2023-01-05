@@ -217,6 +217,7 @@ int _print_layout_line(WINDOW *win, struct node *nodes, size_t len, enum nodes_d
     size_t leftover_leftover = total_leftover - leftover_base * expanded_nodes_amount;
 
     size_t curr_pos = direction == nodes_direction_columns ? rect.col : rect.row;
+    size_t end_pos = direction == nodes_direction_columns ? rect.col + rect.width : rect.row + rect.height;
     size_t curr_weighted_node_index = 0;
     NODES_FOREACH_N(curr, i, nodes, len) {
         struct rect inner_rect = rect;
@@ -237,6 +238,8 @@ int _print_layout_line(WINDOW *win, struct node *nodes, size_t len, enum nodes_d
             inner_rect.row = curr_pos;
             inner_rect.height = curr_size;
         }
+
+        if (curr_pos + curr_size > end_pos) break;
 
         _print_layout(win, curr, inner_rect, color_top, attr_top);
         curr_pos += curr_size;
