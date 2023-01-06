@@ -12,6 +12,11 @@
 #define SUB_OR_ZERO(a, b) (((a) > (b)) ? (a) - (b) : 0)
 #define OTHER_DIRECTION(dir) ((dir) == nodes_direction_columns ? nodes_direction_rows : nodes_direction_columns)
 
+struct size {
+    size_t width;
+    size_t height;
+};
+
 size_t get_str_width(const char *str) {
     size_t sz = 0;
     size_t line_sz = 0;
@@ -37,10 +42,10 @@ size_t get_str_height(const char *str) {
     return sz;
 }
 
-size_t get_width(struct node *node, size_t max_height);
-size_t get_height(struct node *node, size_t max_width);
+size_t get_width(struct node *node, struct size max_size);
+size_t get_height(struct node *node, struct size max_size);
 
-size_t get_overflow_min_height(struct node *node, size_t max_width) {
+size_t get_overflow_min_height(struct node *node, struct size max_size) {
     struct node *curr;
     size_t sz = 0;
     if (node->nodes_direction == nodes_direction_columns) {
@@ -49,12 +54,12 @@ size_t get_overflow_min_height(struct node *node, size_t max_width) {
         size_t line_width = 0;
         size_t line_height = 0;
         LIST_FOREACH(curr, &node->nodes, entry) {
-            size_t width = get_width(curr, 100000);
-            if (line_width + width > max_width) {
+            size_t width = get_width(curr, max_size);
+            if (line_width + width > max_size.width) {
                 line_width = 0;
                 sz += line_height;
             }
-            line_height = MAX(line_height, get_height(curr, max_width));
+            line_height = MAX(line_height, get_height(curr, max_size));
             line_width += width;
         }
     } else {
@@ -62,7 +67,7 @@ size_t get_overflow_min_height(struct node *node, size_t max_width) {
         // b d |
 
         // start with the max height of all children
-        LIST_FOREACH(curr, &node->nodes, entry) { sz = MAX(sz, get_height(curr, max_width)); }
+        LIST_FOREACH(curr, &node->nodes, entry) { sz = MAX(sz, get_height(curr, max_size)); }
 
         // increment the size until all children fit
         while (1) {
@@ -71,7 +76,7 @@ size_t get_overflow_min_height(struct node *node, size_t max_width) {
             size_t columns_width = 0;
             size_t column_width = 0;
             LIST_FOREACH(curr, &node->nodes, entry) {
-                size_t height = get_height(curr, max_width);
+                size_t height = get_height(curr, max_size);
 
                 // we are generated that height > sz because of the first loop.
                 if (column_height + height > sz) {
@@ -79,17 +84,17 @@ size_t get_overflow_min_height(struct node *node, size_t max_width) {
                     columns_width = 0;
                     columns_width += column_width;
                 }
-                column_width = MAX(column_width, get_width(curr, height));
+                column_width = MAX(column_width, get_width(curr, (struct size){max_size.width, height}));
                 column_height += height;
             }
-            if (columns_width <= max_width)
+            if (columns_width <= max_size.width)
                 break;
         }
     }
     return sz;
 }
 
-size_t get_overflow_min_width(struct node *node, size_t max_height) {
+size_t get_overflow_min_width(struct node *node, struct size max_size) {
     struct node *curr;
     size_t sz = 0;
     if (node->nodes_direction == nodes_direction_rows) {
@@ -100,12 +105,12 @@ size_t get_overflow_min_width(struct node *node, size_t max_height) {
         size_t column_height = 0;
         size_t column_width = 0;
         LIST_FOREACH(curr, &node->nodes, entry) {
-            size_t height = get_height(curr, 100000);
-            if (column_height + height > max_height) {
+            size_t height = get_height(curr, max_size);
+            if (column_height + height > max_size.height) {
                 column_height = 0;
                 sz += column_width;
             }
-            column_width = MAX(column_width, get_width(curr, max_height));
+            column_width = MAX(column_width, get_width(curr, max_size));
             column_height += height;
         }
     } else {
@@ -114,7 +119,7 @@ size_t get_overflow_min_width(struct node *node, size_t max_height) {
         // ---
 
         // start with the max height of all children
-        LIST_FOREACH(curr, &node->nodes, entry) { sz = MAX(sz, get_height(curr, max_height)); }
+        LIST_FOREACH(curr, &node->nodes, entry) { sz = MAX(sz, get_height(curr, max_size)); }
 
         // increment the size until all children fit
         while (1) {
@@ -123,7 +128,7 @@ size_t get_overflow_min_width(struct node *node, size_t max_height) {
             size_t rows_height = 0;
             size_t row_height = 0;
             LIST_FOREACH(curr, &node->nodes, entry) {
-                size_t width = get_width(curr, max_height);
+                size_t width = get_width(curr, max_size);
 
                 // we are generated that width > sz because of the first loop.
                 if (row_width + width > sz) {
@@ -131,37 +136,37 @@ size_t get_overflow_min_width(struct node *node, size_t max_height) {
                     row_height = 0;
                     rows_height += row_height;
                 }
-                row_height = MAX(row_height, get_height(curr, width));
+                row_height = MAX(row_height, get_height(curr, (struct size){width, max_size.height}));
                 row_width += width;
             }
-            if (rows_height <= max_height)
+            if (rows_height <= max_size.height)
                 break;
         }
     }
     return sz;
 }
 
-size_t get_width(struct node *node, size_t max_height) {
+size_t get_width(struct node *node, struct size max_size) {
     size_t sz = 0;
     struct node *curr;
     if (node->content) {
         sz = get_str_width(node->content);
     } else if (node->wrap == node_wrap_wrap) {
-        return get_overflow_min_width(node, max_height);
+        return get_overflow_min_width(node, max_size);
     } else if (node->nodes_direction == nodes_direction_rows) {
         size_t height = 0;
         NODES_FOREACH (curr, &node->nodes) {
-            size_t width = get_width(curr, max_height);
+            size_t width = get_width(curr, max_size);
             sz = MAX(sz, width);
 
-            height += get_height(curr, width);
-            if (height >= max_height) {
+            height += get_height(curr, (struct size){width, max_size.height});
+            if (height >= max_size.height) {
                 break;
             }
         }
     } else {
         NODES_FOREACH (curr, &node->nodes) {
-            sz += get_width(curr, max_height);
+            sz += get_width(curr, max_size);
         }
     }
     sz += node->padding_left;
@@ -169,27 +174,27 @@ size_t get_width(struct node *node, size_t max_height) {
     return sz;
 }
 
-size_t get_height(struct node *node, size_t max_width) {
+size_t get_height(struct node *node, struct size max_size) {
     size_t sz = 0;
     struct node *curr;
     if (node->content) {
         sz = get_str_height(node->content);
     } else if (node->wrap == node_wrap_wrap) {
-        return get_overflow_min_height(node, max_width);
+        return get_overflow_min_height(node, max_size);
     } else if (node->nodes_direction == nodes_direction_columns) {
         size_t width = 0;
         NODES_FOREACH (curr, &node->nodes) {
-            size_t height = get_height(curr, max_width);
+            size_t height = get_height(curr, max_size);
             sz = MAX(sz, height);
 
-            width += get_width(curr, height);
-            if (width >= max_width) {
+            width += get_width(curr, (struct size){max_size.width, height});
+            if (width >= max_size.width) {
                 break;
             }
         }
     } else {
         NODES_FOREACH (curr, &node->nodes) {
-            sz += get_height(curr, max_width);
+            sz += get_height(curr, max_size);
         }
     }
     sz += node->padding_top;
@@ -200,9 +205,10 @@ size_t get_height(struct node *node, size_t max_width) {
 err_t _print_layout(struct layout *layout, struct node *node, struct rect rect, NCURSES_PAIRS_T color_top,
                     attr_t attr_top);
 
+#define RECT_SIZE(rect) ((struct size){.width = rect.width, .height = rect.height})
 #define NODE_MIN_SZ(dir, node, bounds)                                                                                 \
-    (node->fit_content ? ((dir) == nodes_direction_columns ? get_width((node), (bounds).height)                        \
-                                                           : get_height((node), (bounds).width))                       \
+    (node->fit_content ? ((dir) == nodes_direction_columns ? get_width((node), RECT_SIZE(bounds))                      \
+                                                           : get_height((node), RECT_SIZE(bounds)))                    \
                        : 0)
 
 err_t _print_layout_line(struct layout *layout, struct node *nodes, size_t len, enum nodes_direction direction,
