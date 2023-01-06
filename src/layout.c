@@ -152,7 +152,7 @@ size_t get_width(struct node *node, struct size max_size) {
     if (node->content) {
         sz = get_str_width(node->content);
     } else if (node->wrap == node_wrap_wrap) {
-        return get_overflow_min_width(node, max_size);
+        sz = get_overflow_min_width(node, max_size);
     } else if (node->nodes_direction == nodes_direction_rows) {
         size_t height = 0;
         NODES_FOREACH (curr, &node->nodes) {
@@ -180,7 +180,7 @@ size_t get_height(struct node *node, struct size max_size) {
     if (node->content) {
         sz = get_str_height(node->content);
     } else if (node->wrap == node_wrap_wrap) {
-        return get_overflow_min_height(node, max_size);
+        sz = get_overflow_min_height(node, max_size);
     } else if (node->nodes_direction == nodes_direction_columns) {
         size_t width = 0;
         NODES_FOREACH (curr, &node->nodes) {
