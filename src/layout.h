@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <ncurses.h>
+#include "err.h"
 
 enum nodes_direction {
   nodes_direction_none = 0,
@@ -35,19 +36,31 @@ struct node {
   NCURSES_PAIRS_T color;
 };
 
-#define NODES_FOREACH(var, head) LIST_FOREACH(var, head, entry)
-#define NODES_FOREACH_N(var, num, node, n) 					\
-	for ((num) = 0, (var) = (node);				\
-		(var) && (num) < (n);							\
-		(var) = LIST_NEXT((var), entry), (num)++)
+typedef err_t (draw_text_t)(void* arg, const char* text, int len, int x, int y, int color, int attrs);
+typedef err_t (draw_color_t)(void* arg, int x, int y, int width, int height, int color);
 
-int print_layout(WINDOW *win, struct node *node);
-struct node* init_node(void);
-struct node* init_child(struct node *node);
-void append_text(struct node *parent, const char*);
-void append_styled_text(struct node *parent, const char*, short color, attr_t attrs);
-void append_node(struct node *parent, struct node* child);
-void clear_nodes(struct node *);
-void free_node(struct node *);
+struct layout {
+    struct node root;
+    draw_text_t* draw_text;
+    draw_color_t* draw_color;
+    void* draw_arg;
+};
+
+struct rect {
+    size_t col;
+    size_t row;
+    size_t width;
+    size_t height;
+};
+
+err_t init_layout(struct layout**, draw_text_t* draw_text, draw_color_t* draw_color, void* draw_arg);
+err_t free_layout(struct layout*);
+err_t clear_layout(struct layout*);
+err_t draw_layout(struct layout* layout, struct rect rect);
+
+err_t append_text(struct node *, const char*);
+err_t append_styled_text(struct node *, const char*, short color, attr_t attrs);
+err_t append_child(struct node *, struct node** child);
+err_t clear_children(struct node *);
 
 #endif // GIT_LIVE_LAYOUT_H

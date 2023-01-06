@@ -1,4 +1,5 @@
 #include "layout.h"
+#include "ncurses_layout.h"
 #include <curses.h>
 #include <git2.h>
 #include <limits.h>
@@ -141,15 +142,17 @@ void get_co_command(char *out, size_t maxlen, size_t index) {
 void print_refs(struct node *node, struct refs *refs) {
     struct ref *curr;
     char buff[CHECKOUT_MAX_LEN];
+    struct node *names = NULL;
+    struct node *co_commands = NULL;
 
-    clear_nodes(node);
+    clear_children(node);
 
-    struct node *names = init_child(node);
+    append_child(node, &names);
     names->nodes_direction = nodes_direction_rows;
     names->fit_content = true;
-//    names->basis = 15;
+    //    names->basis = 15;
 
-    struct node *co_commands = init_child(node);
+    append_child(node, &co_commands);
     co_commands->nodes_direction = nodes_direction_rows;
     co_commands->padding_left = 4;
     co_commands->expand = 1;
@@ -172,27 +175,31 @@ void print_latest_commits(struct node *node, git_repository *repo, int max) {
     char hash[6];
     char time[16];
     git_oid next;
+    struct node *hash_col = NULL;
+    struct node *msg_col = NULL;
+    struct node *user_col = NULL;
+    struct node *time_col = NULL;
 
     git_revwalk_new(&walker, repo);
     git_revwalk_push_ref(walker, "HEAD");
 
-    clear_nodes(node);
+    clear_children(node);
 
-    struct node *hash_col = init_child(node);
+    append_child(node, &hash_col);
     hash_col->fit_content = true;
     hash_col->nodes_direction = nodes_direction_rows;
 
-    struct node *msg_col = init_child(node);
+    append_child(node, &msg_col);
     msg_col->expand = 1;
     msg_col->nodes_direction = nodes_direction_rows;
     msg_col->padding_left = 1;
 
-    struct node *user_col = init_child(node);
+    append_child(node, &user_col);
     user_col->fit_content = true;
     user_col->nodes_direction = nodes_direction_rows;
     user_col->padding_left = 1;
 
-    struct node *time_col = init_child(node);
+    append_child(node, &time_col);
     time_col->fit_content = true;
     time_col->nodes_direction = nodes_direction_rows;
     time_col->padding_left = 1;
@@ -206,9 +213,9 @@ void print_latest_commits(struct node *node, git_repository *repo, int max) {
 
         append_styled_text(hash_col, hash, COLOR_COMMIT_HASH, WA_DIM);
 
-//        first_line_end = (int)(strchr(git_commit_message(commit), '\n') - git_commit_message(commit));
-//        waddnstr(win, git_commit_message(commit), MIN(first_line_end, getmaxx(win) - 15 - 15));
-//        append_text(node, git_commit_message(commit), MIN(first_line_end, getmaxx(win) - 15 - 15));
+        //        first_line_end = (int)(strchr(git_commit_message(commit), '\n') - git_commit_message(commit));
+        //        waddnstr(win, git_commit_message(commit), MIN(first_line_end, getmaxx(win) - 15 - 15));
+        //        append_text(node, git_commit_message(commit), MIN(first_line_end, getmaxx(win) - 15 - 15));
         append_styled_text(msg_col, git_commit_message(commit), COLOR_COMMIT_TITLE, 0);
 
         append_styled_text(user_col, git_commit_committer(commit)->name, COLOR_COMMIT_USER, WA_DIM);
@@ -277,7 +284,7 @@ void print_status(struct node *node, git_repository *repo) {
         exit(1);
     }
 
-    clear_nodes(node);
+    clear_children(node);
 
     append_text(node, " staged:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
@@ -323,18 +330,22 @@ void print_status(struct node *node, git_repository *repo) {
 }
 
 int main() {
+    err_t err = 0;
     char cwd[PATH_MAX];
     char head_name[100];
     WINDOW *win;
     struct refs refs = LIST_HEAD_INITIALIZER();
+    struct layout *layout = NULL;
+    struct node *top_header = NULL;
+    struct node *top = NULL;
+    struct node *middle_header = NULL;
+    struct node *middle = NULL;
+    struct node *bottom_header = NULL;
+    struct node *bottom = NULL;
 
-    if ((win = initscr()) == NULL) {
-        exit(1);
-    }
+    ASSERT(win = initscr());
 
-    if (getcwd(cwd, PATH_MAX) == NULL) {
-        exit(1);
-    }
+    ASSERT(getcwd(cwd, PATH_MAX));
 
     git_libgit2_init();
     git_repository *repo = NULL;
@@ -353,45 +364,51 @@ int main() {
     init_pair(COLOR_COMMIT_DATE, -1, -1);
     init_pair(COLOR_COMMIT_USER, -1, -1);
 
-    struct node *root = init_node();
-    root->expand = 1;
-    root->fit_content = true;
-    root->nodes_direction = nodes_direction_rows;
+    RETHROW(init_ncurses_layout(&layout, win));
+    layout->root.expand = 1;
+    layout->root.fit_content = true;
+    layout->root.nodes_direction = nodes_direction_rows;
 
-    struct node *top_header = init_child(root);
+    RETHROW(append_child(&layout->root, &top_header));
     top_header->basis = 1;
     top_header->padding_left = 1;
     top_header->nodes_direction = nodes_direction_columns;
     top_header->color = COLOR_TITLE;
 
-    struct node *top = init_child(root);
+    RETHROW(append_child(&layout->root, &top));
     top->expand = 1;
     top->nodes_direction = nodes_direction_rows;
     top->wrap = node_wrap_wrap;
     // top->padding_left = 1;
     top->fit_content = true;
 
-    struct node *middle_header = init_child(root);
+    RETHROW(append_child(&layout->root, &middle_header));
     middle_header->basis = 1;
     middle_header->padding_left = 1;
     middle_header->color = COLOR_TITLE;
 
-    struct node *middle = init_child(root);
+    RETHROW(append_child(&layout->root, &middle));
     middle->expand = 1;
     middle->nodes_direction = nodes_direction_columns;
     middle->padding_left = 1;
 
-    struct node *bottom_header = init_child(root);
+    RETHROW(append_child(&layout->root, &bottom_header));
     bottom_header->basis = 1;
     bottom_header->padding_left = 1;
     bottom_header->color = COLOR_TITLE;
 
-    struct node *bottom = init_child(root);
+    RETHROW(append_child(&layout->root, &bottom));
     bottom->expand = 1;
     bottom->nodes_direction = nodes_direction_columns;
     bottom->padding_left = 1;
 
     while (1) {
+        struct node *top_header_left = NULL;
+        struct node *title = NULL;
+        struct node *top_header_right = NULL;
+        struct node *branch = NULL;
+        struct node *padding = NULL;
+
         print_status(top, repo);
 
         get_latest_refs(&refs, repo, getmaxy(win) - 2); // we get more and some will be hidden
@@ -400,53 +417,51 @@ int main() {
 
         print_latest_commits(bottom, repo, getmaxy(win) / 3);
 
-        clear_nodes(top_header);
-        clear_nodes(middle_header);
-        clear_nodes(bottom_header);
+        RETHROW(clear_children(top_header));
+        RETHROW(clear_children(middle_header));
+        RETHROW(clear_children(bottom_header));
 
         get_head_name(repo, head_name, 100);
 
-        struct node* top_header_left = init_child(top_header);
+        RETHROW(append_child(top_header, &top_header_left));
         top_header_left->expand = 1;
         top_header_left->nodes_direction = nodes_direction_columns;
 
-        struct node* title = init_child(top_header);
+        RETHROW(append_child(top_header, &title));
         title->fit_content = true;
         title->padding_left = 1;
         title->padding_right = 1;
-        append_text(title, "Git Live");
+        RETHROW(append_text(title, "Git Live"));
 
-        struct node* top_header_right = init_child(top_header);
+        RETHROW(append_child(top_header, &top_header_right));
         top_header_right->expand = 1;
         top_header_right->nodes_direction = nodes_direction_columns;
 
-        struct node* status = init_child(top_header_left);
-        status->fit_content = true;
-        append_text(top_header_left, "Status");
+        RETHROW(append_text(top_header_left, "Status"));
 
-        struct node* branch = init_child(top_header_left);
+        RETHROW(append_child(top_header_left, &branch));
         branch->expand = 1;
         branch->padding_left = 1;
         branch->nodes_direction = nodes_direction_columns;
-        append_text(branch, "(");
-        append_text(branch, head_name);
-        append_text(branch, ")");
+        RETHROW(append_text(branch, "("));
+        RETHROW(append_text(branch, head_name));
+        RETHROW(append_text(branch, ")"));
 
-
-        struct node* padding = init_child(top_header_right);
+        RETHROW(append_child(top_header_right, &padding));
         padding->expand = 1;
 
-        append_text(top_header_right, cwd);
+        RETHROW(append_text(top_header_right, cwd));
 
-        append_text(middle_header, "Latest Branches");
-        append_text(bottom_header, "Commits");
+        RETHROW(append_text(middle_header, "Latest Branches"));
+        RETHROW(append_text(bottom_header, "Commits"));
 
         wclear(win);
-        print_layout(win, root);
+        RETHROW(draw_layout(layout, (struct rect){0, 0, getmaxx(win), getmaxy(win)}));
         wrefresh(win);
         usleep(100000);
     }
 
+cleanup:
     delwin(win);
     endwin();
     refresh();

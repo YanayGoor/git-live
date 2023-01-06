@@ -1,7 +1,9 @@
 #include <curses.h>
 #include <string.h>
 
+#include "err.h"
 #include "layout.h"
+#include "list.h"
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -10,23 +12,23 @@
 #define SUB_OR_ZERO(a, b) (((a) > (b)) ? (a) - (b) : 0)
 #define OTHER_DIRECTION(dir) ((dir) == nodes_direction_columns ? nodes_direction_rows : nodes_direction_columns)
 
-struct rect {
-    size_t col;
-    size_t row;
+struct size {
     size_t width;
     size_t height;
 };
 
 size_t get_str_width(const char *str) {
     size_t sz = 0;
-    const char *curr_line = str;
-    const char *next_line;
-    while ((next_line = strchr(curr_line, '\n')) != NULL) {
-        sz = MAX(sz, (size_t)(next_line - curr_line));
-        curr_line = next_line + 1;
+    size_t line_sz = 0;
+    for (size_t i = 0; i < strlen(str); i++) {
+        if (str[i] == '\n') {
+            sz = MAX(sz, line_sz);
+            line_sz = 0;
+        } else {
+            line_sz++;
+        }
     }
-    sz = MAX(sz, strlen(curr_line));
-    return sz;
+    return MAX(sz, line_sz);
 }
 
 size_t get_str_height(const char *str) {
@@ -40,10 +42,10 @@ size_t get_str_height(const char *str) {
     return sz;
 }
 
-size_t get_width(struct node *node, size_t max_height);
-size_t get_height(struct node *node, size_t max_width);
+size_t get_width(struct node *node, struct size max_size);
+size_t get_height(struct node *node, struct size max_size);
 
-size_t get_overflow_min_height(struct node *node, size_t max_width) {
+size_t get_overflow_min_height(struct node *node, struct size max_size) {
     struct node *curr;
     size_t sz = 0;
     if (node->nodes_direction == nodes_direction_columns) {
@@ -52,43 +54,47 @@ size_t get_overflow_min_height(struct node *node, size_t max_width) {
         size_t line_width = 0;
         size_t line_height = 0;
         LIST_FOREACH(curr, &node->nodes, entry) {
-            size_t width = get_width(curr, 100000);
-            if (line_width + width > max_width) {
+            size_t width = get_width(curr, max_size);
+            if (line_width + width > max_size.width) {
                 line_width = 0;
                 sz += line_height;
             }
-            line_height = MAX(line_height, get_height(curr, max_width));
+            line_height = MAX(line_height, get_height(curr, max_size));
             line_width += width;
         }
     } else {
         // a c |
         // b d |
+
+        // start with the max height of all children
+        LIST_FOREACH(curr, &node->nodes, entry) { sz = MAX(sz, get_height(curr, max_size)); }
+
+        // increment the size until all children fit
         while (1) {
-        again:
             sz++;
             size_t column_height = 0;
             size_t columns_width = 0;
             size_t column_width = 0;
             LIST_FOREACH(curr, &node->nodes, entry) {
-                size_t height = get_height(curr, max_width);
-                if (height > sz) {
-                    goto again;
-                }
+                size_t height = get_height(curr, max_size);
+
+                // we are generated that height > sz because of the first loop.
                 if (column_height + height > sz) {
                     column_height = 0;
+                    columns_width = 0;
                     columns_width += column_width;
                 }
-                column_width = MAX(column_width, get_width(curr, height));
+                column_width = MAX(column_width, get_width(curr, (struct size){max_size.width, height}));
                 column_height += height;
             }
-            if (columns_width <= max_width)
+            if (columns_width <= max_size.width)
                 break;
         }
     }
     return sz;
 }
 
-size_t get_overflow_min_width(struct node *node, size_t max_height) {
+size_t get_overflow_min_width(struct node *node, struct size max_size) {
     struct node *curr;
     size_t sz = 0;
     if (node->nodes_direction == nodes_direction_rows) {
@@ -99,60 +105,68 @@ size_t get_overflow_min_width(struct node *node, size_t max_height) {
         size_t column_height = 0;
         size_t column_width = 0;
         LIST_FOREACH(curr, &node->nodes, entry) {
-            size_t height = get_height(curr, 100000);
-            if (column_height + height > max_height) {
+            size_t height = get_height(curr, max_size);
+            if (column_height + height > max_size.height) {
                 column_height = 0;
                 sz += column_width;
             }
-            column_width = MAX(column_width, get_width(curr, max_height));
+            column_width = MAX(column_width, get_width(curr, max_size));
             column_height += height;
         }
     } else {
         // a b
         // c d
         // ---
+
+        // start with the max height of all children
+        LIST_FOREACH(curr, &node->nodes, entry) { sz = MAX(sz, get_height(curr, max_size)); }
+
+        // increment the size until all children fit
         while (1) {
             sz++;
             size_t row_width = 0;
             size_t rows_height = 0;
             size_t row_height = 0;
             LIST_FOREACH(curr, &node->nodes, entry) {
-                size_t width = get_width(curr, max_height);
+                size_t width = get_width(curr, max_size);
+
+                // we are generated that width > sz because of the first loop.
                 if (row_width + width > sz) {
                     row_width = 0;
+                    row_height = 0;
                     rows_height += row_height;
                 }
-                row_height = MAX(row_height, get_height(curr, width));
+                row_height = MAX(row_height, get_height(curr, (struct size){width, max_size.height}));
                 row_width += width;
             }
-            if (rows_height <= max_height)
+            if (rows_height <= max_size.height)
                 break;
         }
     }
     return sz;
 }
 
-size_t get_width(struct node *node, size_t max_height) {
+size_t get_width(struct node *node, struct size max_size) {
     size_t sz = 0;
     struct node *curr;
     if (node->content) {
         sz = get_str_width(node->content);
     } else if (node->wrap == node_wrap_wrap) {
-        return get_overflow_min_width(node, max_height);
+        return get_overflow_min_width(node, max_size);
     } else if (node->nodes_direction == nodes_direction_rows) {
         size_t height = 0;
         NODES_FOREACH (curr, &node->nodes) {
-            size_t width = get_width(curr, max_height);
+            size_t width = get_width(curr, max_size);
             sz = MAX(sz, width);
 
-            height += get_height(curr, width);
-            if (height >= max_height) {
+            height += get_height(curr, (struct size){width, max_size.height});
+            if (height >= max_size.height) {
                 break;
             }
         }
     } else {
         NODES_FOREACH (curr, &node->nodes) {
-            sz += get_width(curr, max_height);
+            sz += get_width(curr, max_size);
         }
     }
     sz += node->padding_left;
@@ -160,27 +174,27 @@ size_t get_width(struct node *node, size_t max_height) {
     return sz;
 }
 
-size_t get_height(struct node *node, size_t max_width) {
+size_t get_height(struct node *node, struct size max_size) {
     size_t sz = 0;
     struct node *curr;
     if (node->content) {
         sz = get_str_height(node->content);
     } else if (node->wrap == node_wrap_wrap) {
-        return get_overflow_min_height(node, max_width);
+        return get_overflow_min_height(node, max_size);
     } else if (node->nodes_direction == nodes_direction_columns) {
         size_t width = 0;
         NODES_FOREACH (curr, &node->nodes) {
-            size_t height = get_height(curr, max_width);
+            size_t height = get_height(curr, max_size);
             sz = MAX(sz, height);
 
-            width += get_width(curr, height);
-            if (width >= max_width) {
+            width += get_width(curr, (struct size){max_size.width, height});
+            if (width >= max_size.width) {
                 break;
             }
         }
     } else {
         NODES_FOREACH (curr, &node->nodes) {
-            sz += get_height(curr, max_width);
+            sz += get_height(curr, max_size);
         }
     }
     sz += node->padding_top;
@@ -188,17 +202,18 @@ size_t get_height(struct node *node, size_t max_width) {
     return sz;
 }
 
-LIST_HEAD(nodes, node);
+err_t _print_layout(struct layout *layout, struct node *node, struct rect rect, NCURSES_PAIRS_T color_top,
+                    attr_t attr_top);
 
-int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIRS_T color_top, attr_t attr_top);
-
+#define RECT_SIZE(rect) ((struct size){.width = rect.width, .height = rect.height})
 #define NODE_MIN_SZ(dir, node, bounds)                                                                                 \
-    (node->fit_content ? ((dir) == nodes_direction_columns ? get_width((node), (bounds).height)                        \
-                                                           : get_height((node), (bounds).width))                       \
+    (node->fit_content ? ((dir) == nodes_direction_columns ? get_width((node), RECT_SIZE(bounds))                      \
+                                                           : get_height((node), RECT_SIZE(bounds)))                    \
                        : 0)
 
-int _print_layout_line(WINDOW *win, struct node *nodes, size_t len, enum nodes_direction direction, struct rect rect,
-                       NCURSES_PAIRS_T color_top, attr_t attr_top) {
+err_t _print_layout_line(struct layout *layout, struct node *nodes, size_t len, enum nodes_direction direction,
+                         struct rect rect, NCURSES_PAIRS_T color_top, attr_t attr_top) {
+    err_t err = NO_ERROR;
     size_t max_size = direction == nodes_direction_columns ? rect.width : rect.height;
     size_t min_sizes_sum = 0;
     size_t expand_sum = 0;
@@ -251,50 +266,50 @@ int _print_layout_line(WINDOW *win, struct node *nodes, size_t len, enum nodes_d
             inner_rect.height = curr_size;
         }
 
-        if (curr_pos + curr_size > end_pos) break;
+        if (curr_pos + curr_size > end_pos)
+            break;
 
-        _print_layout(win, curr, inner_rect, color_top, attr_top);
+        RETHROW(_print_layout(layout, curr, inner_rect, color_top, attr_top));
         curr_pos += curr_size;
     }
 
-    return 0;
+cleanup:
+    return err;
 }
 
-int _print_layout_content_str(WINDOW *win, const char *content, struct rect rect) {
+err_t _print_layout_content_str(struct layout *layout, const char *content, struct rect rect, int color, int attr) {
+    err_t err = NO_ERROR;
     int width = (int)rect.width;
     const char *curr_line = content;
     const char *next_line;
     int row = 0;
 
-    wmove(win, (int)rect.row + row, (int)rect.col);
+    ASSERT(layout);
+    ASSERT(content);
+
     while ((next_line = strchr(curr_line, '\n')) != NULL) {
-        wmove(win, (int)rect.row + row, (int)rect.col);
-        waddnstr(win, curr_line, MIN((int)(next_line - curr_line), width));
+        RETHROW(layout->draw_text(layout->draw_arg, curr_line, width, (int)rect.row + row, (int)rect.col, color, attr));
         curr_line = next_line + 1;
         row++;
         if (row >= (int)rect.height)
             break;
     }
     if (row < (int)rect.height) {
-        waddnstr(win, curr_line, width);
+        RETHROW(layout->draw_text(layout->draw_arg, curr_line, width, (int)rect.row + row, (int)rect.col, color, attr));
     }
-    return 0;
+
+cleanup:
+    return err;
 }
 
-void clear_list(struct nodes *nodes) {
-    while (LIST_FIRST(nodes) != NULL) {
-        LIST_REMOVE(LIST_FIRST(nodes), entry);
-    }
-}
+err_t _print_layout(struct layout *layout, struct node *node, struct rect rect, NCURSES_PAIRS_T color_top,
+                    attr_t attr_top) {
+    err_t err = NO_ERROR;
 
-int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIRS_T color_top, attr_t attr_top) {
-    if (node->attr) {
-        wattr_on(win, node->attr, NULL);
-    }
-    if (node->color) {
-        wcolor_set(win, node->color, NULL);
-    }
+    ASSERT(layout);
+    ASSERT(node);
 
+    int color = node->color ? node->color : color_top;
     struct rect inner_rect = {
         .col = rect.col + node->padding_left,
         .row = rect.row + node->padding_top,
@@ -302,16 +317,10 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
         .width = rect.width - node->padding_right - node->padding_left,
     };
 
-
-    if (node->color) {
-        WINDOW *tempwin = subwin(win, rect.height, rect.width, rect.row, rect.col);
-        wbkgd(tempwin, COLOR_PAIR(node->color));
-        wrefresh(tempwin);
-        delwin(tempwin);
-    }
+    RETHROW(layout->draw_color(layout->draw_arg, rect.row, rect.col, rect.width, rect.height, color));
 
     if (LIST_EMPTY(&node->nodes) && node->content != NULL) {
-        _print_layout_content_str(win, node->content, inner_rect);
+        RETHROW(_print_layout_content_str(layout, node->content, inner_rect, color, node->attr));
     }
 
     // split to lines if warp is true
@@ -347,13 +356,16 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
             .row = inner_rect.row + (node->nodes_direction == nodes_direction_columns ? prev_other_size : 0),
             .col = inner_rect.col + (node->nodes_direction == nodes_direction_rows ? prev_other_size : 0),
             // if the line is not the last, take the minimum size of it.
-            .height = curr != NULL ? node->nodes_direction == nodes_direction_columns ? curr_other_size : inner_rect.height : inner_rect.height,
-            .width = curr != NULL ? node->nodes_direction == nodes_direction_rows ? curr_other_size : inner_rect.width : inner_rect.width,
+            .height = curr != NULL
+                          ? node->nodes_direction == nodes_direction_columns ? curr_other_size : inner_rect.height
+                          : inner_rect.height,
+            .width = curr != NULL ? node->nodes_direction == nodes_direction_rows ? curr_other_size : inner_rect.width
+                                  : inner_rect.width,
         };
-        _print_layout_line(win, first, len, node->nodes_direction, inner_line_rect, node->color, attr_top | node->attr);
+        RETHROW(_print_layout_line(layout, first, len, node->nodes_direction, inner_line_rect, color,
+                                   attr_top | node->attr));
 
         if (curr == NULL) {
-//            first = NULL;
             break;
         }
         curr = LIST_NEXT(curr, entry);
@@ -361,70 +373,162 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
         prev_other_size += curr_other_size;
     }
 
-    if (node->attr && !(node->attr & attr_top))
-        wattr_off(win, node->attr, NULL);
-    if (node->color)
-        wcolor_set(win, color_top, NULL);
-
-    return 0;
+cleanup:
+    return err;
 }
 
-int print_layout(WINDOW *win, struct node *node) {
-    return _print_layout(win, node, (struct rect){.col = 0, .row = 0, .width = getmaxx(win), .height = getmaxy(win)}, 0,
-                         0);
+err_t alloc_node(struct node **node) {
+    err_t err = NO_ERROR;
+
+    ASSERT(node);
+
+    *node = malloc(sizeof(**node));
+    ASSERT(*node);
+
+cleanup:
+    return err;
 }
 
-struct node *init_node(void) {
-    struct node *result = malloc(sizeof(struct node));
-    memset(result, '\0', sizeof(*result));
-    return result;
+err_t free_node(struct node *node) {
+    err_t err = NO_ERROR;
+
+    ASSERT(node);
+
+    free(node);
+
+cleanup:
+    return err;
 }
 
-void append_node(struct node *parent, struct node *child) {
-    if (LIST_EMPTY(&parent->nodes)) {
-        LIST_INSERT_HEAD(&parent->nodes, child, entry);
-    } else {
-        struct node *last = LIST_FIRST(&parent->nodes);
-        while (LIST_NEXT(last, entry)) {
-            last = LIST_NEXT(last, entry);
-        }
-        LIST_INSERT_AFTER(last, child, entry);
+err_t init_node(struct node *node) {
+    err_t err = NO_ERROR;
+
+    ASSERT(node);
+
+    memset(node, '\0', sizeof(*node));
+
+cleanup:
+    return err;
+}
+
+/** public functions **/
+
+err_t init_layout(struct layout **out, draw_text_t *draw_text, draw_color_t *draw_color, void *draw_arg) {
+    err_t err = NO_ERROR;
+    struct layout *result = NULL;
+
+    ASSERT(out);
+    ASSERT(draw_text);
+    ASSERT(draw_color);
+
+    *out = NULL;
+
+    result = malloc(sizeof(*result));
+    ASSERT(result);
+
+    result->draw_text = draw_text;
+    result->draw_color = draw_color;
+    result->draw_arg = draw_arg;
+
+    RETHROW(init_node(&result->root));
+
+    *out = result;
+
+cleanup:
+    return err;
+}
+
+err_t clear_children(struct node *parent) {
+    err_t err = NO_ERROR;
+
+    ASSERT(parent);
+
+    while (!LIST_EMPTY(&parent->nodes)) {
+        struct node *elm = LIST_FIRST(&parent->nodes);
+        LIST_REMOVE(elm, entry);
+        free_node(elm);
     }
+
+cleanup:
+    return err;
 }
 
-struct node* init_child(struct node *node) {
-    struct node* result = init_node();
-    append_node(node, result);
-    return result;
+err_t clear_layout(struct layout *layout) {
+    err_t err = NO_ERROR;
+
+    ASSERT(layout);
+
+    RETHROW(clear_children(&layout->root));
+
+cleanup:
+    return err;
 }
 
-void append_text(struct node *parent, const char *text) {
-    append_styled_text(parent, text, 0, 0);
+err_t free_layout(struct layout *layout) {
+    err_t err = NO_ERROR;
+
+    ASSERT(layout);
+
+    RETHROW(clear_layout(layout));
+    free(layout);
+
+cleanup:
+    return err;
 }
 
-void append_styled_text(struct node *parent, const char* text, short color, attr_t attrs) {
-    char *buff = malloc(strlen(text) + 1);
+err_t draw_layout(struct layout *layout, struct rect rect) {
+    err_t err = NO_ERROR;
+
+    ASSERT(layout);
+
+    RETHROW(_print_layout(layout, &layout->root, rect, 0, 0));
+
+cleanup:
+    return err;
+}
+
+err_t append_child(struct node *parent, struct node **child) {
+    err_t err = NO_ERROR;
+
+    ASSERT(parent);
+    ASSERT(child);
+
+    RETHROW(alloc_node(child));
+    RETHROW(init_node(*child));
+    LIST_APPEND(&parent->nodes, *child, entry);
+
+cleanup:
+    return err;
+}
+
+err_t append_styled_text(struct node *parent, const char *text, short color, attr_t attrs) {
+    err_t err = NO_ERROR;
+    char *buff = NULL;
+    struct node *node = NULL;
+
+    buff = malloc(strlen(text) + 1);
+    ASSERT(buff);
+
     strcpy(buff, text);
 
-    struct node *node = init_node();
+    RETHROW(append_child(parent, &node));
     node->content = buff;
     node->fit_content = true;
     node->color = color;
     node->attr = attrs;
-    append_node(parent, node);
+
+cleanup:
+    return err;
 }
 
-void free_node(struct node *node) {
-    if (node->content) {
-        free(node->content);
-    }
-    free(node);
-}
+err_t append_text(struct node *parent, const char *text) {
+    err_t err = NO_ERROR;
 
-void clear_nodes(struct node *node) {
-    while (!LIST_EMPTY(&node->nodes)) {
-        struct node *elm = LIST_FIRST(&node->nodes);
-        LIST_REMOVE(elm, entry);
-        free_node(elm);
-    }
+    ASSERT(parent);
+    ASSERT(text);
+
+    RETHROW(append_styled_text(parent, text, 0, 0));
+
+cleanup:
+    return err;
 }
