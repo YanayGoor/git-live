@@ -174,6 +174,7 @@ void print_latest_commits(struct node *node, git_repository *repo, int max) {
     int line = 1;
     char hash[6];
     char time[16];
+    char msg[512];
     git_oid next;
     struct node *hash_col = NULL;
     struct node *msg_col = NULL;
@@ -213,10 +214,9 @@ void print_latest_commits(struct node *node, git_repository *repo, int max) {
 
         append_styled_text(hash_col, hash, COLOR_COMMIT_HASH, WA_DIM);
 
-        //        first_line_end = (int)(strchr(git_commit_message(commit), '\n') - git_commit_message(commit));
-        //        waddnstr(win, git_commit_message(commit), MIN(first_line_end, getmaxx(win) - 15 - 15));
-        //        append_text(node, git_commit_message(commit), MIN(first_line_end, getmaxx(win) - 15 - 15));
-        append_styled_text(msg_col, git_commit_message(commit), COLOR_COMMIT_TITLE, 0);
+        strncpy(msg, git_commit_message(commit), sizeof(msg) - 1);
+        strtok(msg, "\n");
+        append_styled_text(msg_col, msg, COLOR_COMMIT_TITLE, 0);
 
         append_styled_text(user_col, git_commit_committer(commit)->name, COLOR_COMMIT_USER, WA_DIM);
 

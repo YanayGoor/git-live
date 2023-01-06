@@ -165,8 +165,15 @@ size_t get_width(struct node *node, struct size max_size) {
             }
         }
     } else {
+        size_t height = 0;
         NODES_FOREACH (curr, &node->nodes) {
-            sz += get_width(curr, max_size);
+            size_t width = get_width(curr, max_size);
+            sz += width;
+
+            height += get_height(curr, (struct size){width, max_size.height});
+            if (height >= max_size.height) {
+                break;
+            }
         }
     }
     sz += node->padding_left;
@@ -193,8 +200,15 @@ size_t get_height(struct node *node, struct size max_size) {
             }
         }
     } else {
+        size_t width = 0;
         NODES_FOREACH (curr, &node->nodes) {
-            sz += get_height(curr, max_size);
+            size_t height = get_height(curr, max_size);
+            sz += height;
+
+            width += get_width(curr, (struct size){max_size.width, height});
+            if (width >= max_size.width) {
+                break;
+            }
         }
     }
     sz += node->padding_top;
