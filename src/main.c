@@ -147,7 +147,7 @@ void print_refs(struct node *node, struct refs *refs) {
     struct node *names = init_child(node);
     names->nodes_direction = nodes_direction_rows;
     names->fit_content = true;
-    names->basis = 15;
+//    names->basis = 15;
 
     struct node *co_commands = init_child(node);
     co_commands->nodes_direction = nodes_direction_rows;
@@ -249,18 +249,18 @@ void print_status_entry(const git_status_entry *entry, char *buff, size_t len) {
     }
     if (entry->head_to_index) {
         if (strcmp(entry->head_to_index->new_file.path, entry->head_to_index->old_file.path) != 0) {
-            snprintf(buff, len, "  %s: %s->%s", status, entry->head_to_index->old_file.path,
+            snprintf(buff, len, "   %s: %s->%s", status, entry->head_to_index->old_file.path,
                      entry->head_to_index->new_file.path);
         } else {
-            snprintf(buff, len, "  %s: %s", status, entry->head_to_index->new_file.path);
+            snprintf(buff, len, "   %s: %s", status, entry->head_to_index->new_file.path);
         }
     }
     if (entry->index_to_workdir) {
         if (strcmp(entry->index_to_workdir->new_file.path, entry->index_to_workdir->old_file.path) != 0) {
-            snprintf(buff, len, "  %s: %s->%s", status, entry->index_to_workdir->old_file.path,
+            snprintf(buff, len, "   %s: %s->%s", status, entry->index_to_workdir->old_file.path,
                      entry->index_to_workdir->new_file.path);
         } else {
-            snprintf(buff, len, "  %s: %s", status, entry->index_to_workdir->new_file.path);
+            snprintf(buff, len, "   %s: %s", status, entry->index_to_workdir->new_file.path);
         }
     }
 }
@@ -279,7 +279,7 @@ void print_status(struct node *node, git_repository *repo) {
 
     clear_nodes(node);
 
-    append_text(node, "staged:");
+    append_text(node, " staged:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
         const git_status_entry *entry = git_status_byindex(status_list, i);
         print_status_entry(entry, buff, 200);
@@ -294,7 +294,7 @@ void print_status(struct node *node, git_repository *repo) {
         exit(1);
     }
 
-    append_text(node, "changed:");
+    append_text(node, " changed:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
         const git_status_entry *entry = git_status_byindex(status_list, i);
         print_status_entry(entry, buff, 200);
@@ -310,7 +310,7 @@ void print_status(struct node *node, git_repository *repo) {
         printf("cannot get status list\n");
         exit(1);
     }
-    append_text(node, "untracked:");
+    append_text(node, " untracked:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
         const git_status_entry *entry = git_status_byindex(status_list, i);
         if (entry->index_to_workdir && entry->index_to_workdir->status != GIT_DELTA_UNTRACKED) {
@@ -368,7 +368,7 @@ int main() {
     top->expand = 1;
     top->nodes_direction = nodes_direction_rows;
     top->wrap = node_wrap_wrap;
-    top->padding_left = 1;
+    // top->padding_left = 1;
     top->fit_content = true;
 
     struct node *middle_header = init_child(root);
@@ -444,7 +444,7 @@ int main() {
         wclear(win);
         print_layout(win, root);
         wrefresh(win);
-        usleep(50000);
+        usleep(100000);
     }
 
     delwin(win);

@@ -140,10 +140,15 @@ size_t get_width(struct node *node, size_t max_height) {
     } else if (node->wrap == node_wrap_wrap) {
         return get_overflow_min_width(node, max_height);
     } else if (node->nodes_direction == nodes_direction_rows) {
-        // TODO: if the sum of the height of the nodes is bigger then the node's
-        //  max height (which probably needs to be given from above)
+        size_t height = 0;
         NODES_FOREACH (curr, &node->nodes) {
-            sz = MAX(sz, get_width(curr, max_height));
+            size_t width = get_width(curr, max_height);
+            sz = MAX(sz, width);
+
+            height += get_height(curr, width);
+            if (height >= max_height) {
+                break;
+            }
         }
     } else {
         NODES_FOREACH (curr, &node->nodes) {
@@ -163,8 +168,15 @@ size_t get_height(struct node *node, size_t max_width) {
     } else if (node->wrap == node_wrap_wrap) {
         return get_overflow_min_height(node, max_width);
     } else if (node->nodes_direction == nodes_direction_columns) {
+        size_t width = 0;
         NODES_FOREACH (curr, &node->nodes) {
-            sz = MAX(sz, get_height(curr, max_width));
+            size_t height = get_height(curr, max_width);
+            sz = MAX(sz, height);
+
+            width += get_width(curr, height);
+            if (width >= max_width) {
+                break;
+            }
         }
     } else {
         NODES_FOREACH (curr, &node->nodes) {
@@ -301,10 +313,6 @@ int _print_layout(WINDOW *win, struct node *node, struct rect rect, NCURSES_PAIR
     if (LIST_EMPTY(&node->nodes) && node->content != NULL) {
         _print_layout_content_str(win, node->content, inner_rect);
     }
-//    wmove(win, (int)(rect.row), (int)(rect.col));
-//    waddstr(win, "S");
-//    wmove(win, (int)(rect.row + rect.height), (int)(rect.col + rect.width) - 1);
-//    waddstr(win, "E");
 
     // split to lines if warp is true
     size_t max_size = node->nodes_direction == nodes_direction_rows ? rect.height : rect.width;
