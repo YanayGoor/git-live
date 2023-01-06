@@ -14,14 +14,16 @@
 
 size_t get_str_width(const char *str) {
     size_t sz = 0;
-    const char *curr_line = str;
-    const char *next_line;
-    while ((next_line = strchr(curr_line, '\n')) != NULL) {
-        sz = MAX(sz, (size_t)(next_line - curr_line));
-        curr_line = next_line + 1;
+    size_t line_sz = 0;
+    for (size_t i = 0; i < strlen(str); i++) {
+        if (str[i] == '\n') {
+            sz = MAX(sz, line_sz);
+            line_sz = 0;
+        } else {
+            line_sz++;
+        }
     }
-    sz = MAX(sz, strlen(curr_line));
-    return sz;
+    return MAX(sz, line_sz);
 }
 
 size_t get_str_height(const char *str) {
@@ -58,19 +60,23 @@ size_t get_overflow_min_height(struct node *node, size_t max_width) {
     } else {
         // a c |
         // b d |
+
+        // start with the max height of all children
+        LIST_FOREACH(curr, &node->nodes, entry) { sz = MAX(sz, get_height(curr, max_width)); }
+
+        // increment the size until all children fit
         while (1) {
-        again:
             sz++;
             size_t column_height = 0;
             size_t columns_width = 0;
             size_t column_width = 0;
             LIST_FOREACH(curr, &node->nodes, entry) {
                 size_t height = get_height(curr, max_width);
-                if (height > sz) {
-                    goto again;
-                }
+
+                // we are generated that height > sz because of the first loop.
                 if (column_height + height > sz) {
                     column_height = 0;
+                    columns_width = 0;
                     columns_width += column_width;
                 }
                 column_width = MAX(column_width, get_width(curr, height));
@@ -106,6 +112,11 @@ size_t get_overflow_min_width(struct node *node, size_t max_height) {
         // a b
         // c d
         // ---
+
+        // start with the max height of all children
+        LIST_FOREACH(curr, &node->nodes, entry) { sz = MAX(sz, get_height(curr, max_height)); }
+
+        // increment the size until all children fit
         while (1) {
             sz++;
             size_t row_width = 0;
@@ -113,8 +124,11 @@ size_t get_overflow_min_width(struct node *node, size_t max_height) {
             size_t row_height = 0;
             LIST_FOREACH(curr, &node->nodes, entry) {
                 size_t width = get_width(curr, max_height);
+
+                // we are generated that width > sz because of the first loop.
                 if (row_width + width > sz) {
                     row_width = 0;
+                    row_height = 0;
                     rows_height += row_height;
                 }
                 row_height = MAX(row_height, get_height(curr, width));
