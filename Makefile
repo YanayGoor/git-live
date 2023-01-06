@@ -6,6 +6,7 @@ CFLAGS := -Wall -Wextra -g
 
 SRC += src/main.c
 SRC += src/layout.c
+SRC += src/ncurses_layout.c
 OBJ = $(patsubst %.c,%.o,$(SRC))
 
 all: $(NAME)
