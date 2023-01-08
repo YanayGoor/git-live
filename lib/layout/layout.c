@@ -1,9 +1,9 @@
 #include <curses.h>
 #include <string.h>
 
-#include "err.h"
+#include "../err.h"
+#include "../list.h"
 #include "layout.h"
-#include "list.h"
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -300,6 +300,7 @@ err_t _print_layout_content_str(struct layout *layout, const char *content, stru
 
     ASSERT(layout);
     ASSERT(content);
+    ASSERT(layout->draw_text);
 
     while ((next_line = strchr(curr_line, '\n')) != NULL) {
         RETHROW(layout->draw_text(layout->draw_arg, curr_line, width, (int)rect.row + row, (int)rect.col, color, attr));
@@ -331,6 +332,7 @@ err_t _print_layout(struct layout *layout, struct node *node, struct rect rect, 
         .width = rect.width - node->padding_right - node->padding_left,
     };
 
+    ASSERT(layout->draw_color);
     RETHROW(layout->draw_color(layout->draw_arg, rect.row, rect.col, rect.width, rect.height, color));
 
     if (LIST_EMPTY(&node->nodes) && node->content != NULL) {
@@ -446,6 +448,8 @@ err_t init_layout(struct layout **out, draw_text_t *draw_text, draw_color_t *dra
 
     RETHROW(init_node(&result->root));
 
+    result->root.expand = 1;
+
     *out = result;
 
 cleanup:
@@ -501,6 +505,17 @@ cleanup:
     return err;
 }
 
+err_t get_layout_root(struct layout *layout, struct node **root) {
+    err_t err = NO_ERROR;
+
+    ASSERT(layout);
+    ASSERT(root);
+
+    *root = &layout->root;
+
+cleanup:
+    return err;
+}
 err_t append_child(struct node *parent, struct node **child) {
     err_t err = NO_ERROR;
 

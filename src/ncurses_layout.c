@@ -1,5 +1,5 @@
-#include "err.h"
-#include "layout.h"
+#include "../lib/err.h"
+#include "../lib/layout/layout.h"
 #include "ncurses.h"
 
 err_t ncurses_draw_text(void *arg, const char *text, int len, int x, int y, int color, int attrs) {

@@ -6,7 +6,7 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <ncurses.h>
-#include "err.h"
+#include "../err.h"
 
 enum nodes_direction {
   nodes_direction_none = 0,
@@ -57,6 +57,7 @@ err_t init_layout(struct layout**, draw_text_t* draw_text, draw_color_t* draw_co
 err_t free_layout(struct layout*);
 err_t clear_layout(struct layout*);
 err_t draw_layout(struct layout* layout, struct rect rect);
+err_t get_layout_root(struct layout* layout, struct node **);
 
 err_t append_text(struct node *, const char*);
 err_t append_styled_text(struct node *, const char*, short color, attr_t attrs);

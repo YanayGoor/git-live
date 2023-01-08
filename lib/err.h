@@ -15,7 +15,7 @@ typedef int err_t;
 
 #define RETHROW(x) do { \
   if (x) { \
-    fprintf(stderr, "rethrown from %s:%d\n", __FILE__, __LINE__); \
+    fprintf(stderr, "rethrown from %s:%d (%d)\n", __FILE__, __LINE__, (x)); \
     err = 1;                   \
     goto cleanup; \
   } \
