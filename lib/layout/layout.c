@@ -62,6 +62,7 @@ size_t get_overflow_min_height(struct node *node, struct size max_size) {
             line_height = MAX(line_height, get_height(curr, max_size));
             line_width += width;
         }
+        sz += line_height;
     } else {
         // a c |
         // b d |
@@ -80,9 +81,9 @@ size_t get_overflow_min_height(struct node *node, struct size max_size) {
 
                 // we are generated that height > sz because of the first loop.
                 if (column_height + height > sz) {
-                    column_height = 0;
-                    columns_width = 0;
                     columns_width += column_width;
+                    column_height = 0;
+                    column_width = 0;
                 }
                 column_width = MAX(column_width, get_width(curr, (struct size){max_size.width, height}));
                 column_height += height;
@@ -113,6 +114,7 @@ size_t get_overflow_min_width(struct node *node, struct size max_size) {
             column_width = MAX(column_width, get_width(curr, max_size));
             column_height += height;
         }
+        sz += column_width;
     } else {
         // a b
         // c d
@@ -132,9 +134,9 @@ size_t get_overflow_min_width(struct node *node, struct size max_size) {
 
                 // we are generated that width > sz because of the first loop.
                 if (row_width + width > sz) {
+                    rows_height += row_height;
                     row_width = 0;
                     row_height = 0;
-                    rows_height += row_height;
                 }
                 row_height = MAX(row_height, get_height(curr, (struct size){width, max_size.height}));
                 row_width += width;
@@ -335,9 +337,13 @@ err_t _print_layout(struct layout *layout, struct node *node, struct rect rect, 
     ASSERT(layout->draw_color);
     RETHROW(layout->draw_color(layout->draw_arg, rect.row, rect.col, rect.width, rect.height, color));
 
-    if (LIST_EMPTY(&node->nodes) && node->content != NULL) {
+    if (node->content != NULL) {
+        ASSERT(LIST_EMPTY(&node->nodes));
         RETHROW(_print_layout_content_str(layout, node->content, inner_rect, color, node->attr));
+        goto cleanup;
     }
+
+    ASSERT(node->nodes_direction);
 
     // split to lines if warp is true
     size_t max_size = node->nodes_direction == nodes_direction_rows ? rect.height : rect.width;

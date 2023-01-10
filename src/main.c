@@ -1,3 +1,5 @@
+#include "../lib/layout/layout.h"
+#include "ncurses_layout.h"
 #include <curses.h>
 #include <git2.h>
 #include <limits.h>
@@ -7,8 +9,6 @@
 #include <string.h>
 #include <sys/queue.h>
 #include <unistd.h>
-#include "../lib/layout/layout.h"
-#include "ncurses_layout.h"
 
 #define REFLOG_CO_PREFIX "checkout:"
 
