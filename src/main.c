@@ -10,6 +10,9 @@
 #include <string.h>
 #include <sys/queue.h>
 #include <unistd.h>
+#include <sys/inotify.h>
+#include <poll.h>
+#include <sys/time.h>
 
 #define REFLOG_CO_PREFIX "checkout:"
 
@@ -365,6 +368,7 @@ int main() {
     err_t err = NO_ERROR;
     char cwd[PATH_MAX] = {0};
     char head_name[100] = {0};
+    git_buf buf = {NULL, 0, 0};
     struct refs refs = LIST_HEAD_INITIALIZER();
     struct layout *layout = NULL;
     struct node *top_header = NULL;
@@ -378,9 +382,9 @@ int main() {
 
     ASSERT(win = initscr());
     ASSERT(getcwd(cwd, PATH_MAX));
-
     ASSERT(git_libgit2_init() > 0);
-    ASSERT(git_repository_init(&repo, cwd, false) == 0);
+    ASSERT(!git_repository_discover(&buf, cwd, 0, NULL));
+    ASSERT(!git_repository_open(&repo, buf.ptr));
 
     ASSERT_LIBGIT2(curs_set(0));
     ASSERT_LIBGIT2(start_color());
@@ -433,7 +437,19 @@ int main() {
     bottom->nodes_direction = nodes_direction_columns;
     bottom->padding_left = 1;
 
+    int inotify = inotify_init();
+    ASSERT(inotify != -1);
+    int watch = inotify_add_watch(inotify, buf.ptr, IN_MODIFY);
+    ASSERT(watch != -1);
+
     while (1) {
+        struct pollfd pollfds[1] = {{.fd = inotify, .events = POLLIN , .revents = 0}};
+        int changed = poll(pollfds, 1, 100);
+        if (changed) {
+            char buff[sizeof(struct inotify_event) + NAME_MAX + 1] = {0};
+            read(inotify, buff, sizeof(buff));
+        }
+
         struct node *top_header_left = NULL;
         struct node *title = NULL;
         struct node *top_header_right = NULL;
@@ -489,7 +505,6 @@ int main() {
         werase(win);
         RETHROW(draw_layout(layout, (struct rect){0, 0, getmaxx(win), getmaxy(win)}));
         wrefresh(win);
-        usleep(100000);
     }
 
 cleanup:
