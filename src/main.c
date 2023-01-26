@@ -10,6 +10,9 @@
 #include <string.h>
 #include <sys/queue.h>
 #include <unistd.h>
+#include <sys/inotify.h>
+#include <poll.h>
+#include <sys/time.h>
 
 #define REFLOG_CO_PREFIX "checkout:"
 
@@ -27,6 +30,11 @@
 #define COLOR_COMMIT_TITLE 38
 #define COLOR_COMMIT_DATE 39
 #define COLOR_COMMIT_USER 40
+
+#define MSEC_TO_USEC (1000)
+
+#define INOTIFY_INVALID (-1)
+#define WATCH_INVALID (-1)
 
 #define ASSERT_LIBGIT2(expr) ASSERT(expr != ERR)
 
@@ -361,10 +369,67 @@ cleanup:
     return err;
 }
 
+err_t try_initialize_inotify(char *path, int* out) {
+    err_t err = NO_ERROR;
+
+    ASSERT(path);
+
+    *out = INOTIFY_INVALID;
+
+    int inotify = inotify_init();
+    if (inotify == INOTIFY_INVALID) goto cleanup;
+
+    int watch = inotify_add_watch(inotify, path, IN_MODIFY);
+    if (watch == WATCH_INVALID) goto cleanup;
+
+    *out = inotify;
+
+cleanup:
+    return err;
+}
+
+err_t clear_inotify_message(int inotify) {
+    err_t err = NO_ERROR;
+    char buff[sizeof(struct inotify_event) + NAME_MAX + 1] = {0};
+
+    ASSERT(inotify != INOTIFY_INVALID);
+    read(inotify, buff, sizeof(buff));
+
+cleanup:
+    return err;
+}
+
+err_t wait_for_inotify_message(int inotify, int timeout) {
+    err_t err = NO_ERROR;
+    struct pollfd pollfds[1] = {{.fd = inotify, .events = POLLIN , .revents = 0}};
+
+    ASSERT(inotify != INOTIFY_INVALID);
+
+    int changed = poll(pollfds, 1, timeout);
+    if (changed == 1) {
+        RETHROW(clear_inotify_message(inotify));
+    }
+
+cleanup:
+    return err;
+}
+
+err_t wait_for_ms(int timeout) {
+    err_t err = NO_ERROR;
+
+    ASSERT(timeout < 1000000);
+
+    usleep(timeout * MSEC_TO_USEC);
+
+cleanup:
+    return err;
+}
+
 int main() {
     err_t err = NO_ERROR;
     char cwd[PATH_MAX] = {0};
     char head_name[100] = {0};
+    git_buf buf = {NULL, 0, 0};
     struct refs refs = LIST_HEAD_INITIALIZER();
     struct layout *layout = NULL;
     struct node *top_header = NULL;
@@ -375,12 +440,13 @@ int main() {
     struct node *bottom = NULL;
     WINDOW *win = NULL;
     git_repository *repo = NULL;
+    int inotify = INOTIFY_INVALID;
 
     ASSERT(win = initscr());
     ASSERT(getcwd(cwd, PATH_MAX));
-
     ASSERT(git_libgit2_init() > 0);
-    ASSERT(git_repository_init(&repo, cwd, false) == 0);
+    ASSERT(!git_repository_discover(&buf, cwd, 0, NULL));
+    ASSERT(!git_repository_open(&repo, buf.ptr));
 
     ASSERT_LIBGIT2(curs_set(0));
     ASSERT_LIBGIT2(start_color());
@@ -433,7 +499,15 @@ int main() {
     bottom->nodes_direction = nodes_direction_columns;
     bottom->padding_left = 1;
 
+    RETHROW(try_initialize_inotify(buf.ptr, &inotify));
+
     while (1) {
+        if (inotify == INOTIFY_INVALID) {
+            RETHROW(wait_for_ms(50));
+        } else {
+            RETHROW(wait_for_inotify_message(inotify, 100));
+        }
+
         struct node *top_header_left = NULL;
         struct node *title = NULL;
         struct node *top_header_right = NULL;
@@ -489,7 +563,6 @@ int main() {
         werase(win);
         RETHROW(draw_layout(layout, (struct rect){0, 0, getmaxx(win), getmaxy(win)}));
         wrefresh(win);
-        usleep(100000);
     }
 
 cleanup:
