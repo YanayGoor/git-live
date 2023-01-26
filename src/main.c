@@ -1,3 +1,4 @@
+#include "../lib/err.h"
 #include <curses.h>
 #include <git2.h>
 #include <limits.h>
@@ -24,6 +25,8 @@
 #define COLOR_COMMIT_TITLE 38
 #define COLOR_COMMIT_DATE 39
 #define COLOR_COMMIT_USER 40
+
+#define ASSERT_LIBGIT2(expr) ASSERT(expr != ERR)
 
 struct ref {
     char *name;
@@ -89,9 +92,13 @@ bool refs_append_unique(struct refs *list, struct ref *ref) {
     return true;
 }
 
-void get_latest_refs(struct refs *out, git_repository *repo, size_t max) {
+err_t get_latest_refs(struct refs *out, git_repository *repo, size_t max) {
+    err_t err = NO_ERROR;
     git_reflog *reflog;
     size_t collected = 0;
+
+    ASSERT(out);
+    ASSERT(repo);
 
     git_reflog_read(&reflog, repo, "HEAD");
     size_t count = git_reflog_entrycount(reflog);
@@ -112,14 +119,22 @@ void get_latest_refs(struct refs *out, git_repository *repo, size_t max) {
     }
 
     git_reflog_free(reflog);
+cleanup:
+    return err;
 }
 
-void clear_refs(struct refs *refs) {
+err_t clear_refs(struct refs *refs) {
+    err_t err = NO_ERROR;
+
+    ASSERT(refs);
+
     struct ref *first;
     while ((first = LIST_FIRST(refs)) != NULL) {
         LIST_REMOVE(first, entry);
         free_ref(first);
     }
+cleanup:
+    return err;
 }
 
 size_t get_refs_max_width(struct refs *refs) {
@@ -137,11 +152,15 @@ void get_co_command(char *out, size_t maxlen, size_t index) {
     }
 }
 
-void print_refs(WINDOW *win, struct refs *refs) {
+err_t print_refs(WINDOW *win, struct refs *refs) {
+    err_t err = NO_ERROR;
     struct ref *curr;
     int line = 1;
     char buff[CHECKOUT_MAX_LEN];
     size_t max = get_refs_max_width(refs);
+
+    ASSERT(win);
+    ASSERT(refs);
 
     LIST_FOREACH(curr, refs, entry) {
         if (curr->index == 0)
@@ -159,9 +178,12 @@ void print_refs(WINDOW *win, struct refs *refs) {
         }
         line++;
     }
+cleanup:
+    return err;
 }
 
-void print_latest_commits(WINDOW *win, git_repository *repo, int max) {
+err_t print_latest_commits(WINDOW *win, git_repository *repo, int max) {
+    err_t err = NO_ERROR;
     git_revwalk *walker;
     git_commit *commit;
     int first_line_end;
@@ -169,6 +191,9 @@ void print_latest_commits(WINDOW *win, git_repository *repo, int max) {
     char hash[6];
     char time[15];
     git_oid next;
+
+    ASSERT(win);
+    ASSERT(repo);
 
     git_revwalk_new(&walker, repo);
     git_revwalk_push_ref(walker, "HEAD");
@@ -210,20 +235,23 @@ void print_latest_commits(WINDOW *win, git_repository *repo, int max) {
         if (++line == max)
             break;
     }
+
+cleanup:
+    return err;
 }
 
-int get_head_name(git_repository *repo, char *buff, size_t len) {
-    int error = 0;
+err_t get_head_name(git_repository *repo, char *buff, size_t len) {
+    err_t err = NO_ERROR;
     git_reference *head = NULL;
-    error = git_repository_head(&head, repo);
-    if (error == GIT_EUNBORNBRANCH || error == GIT_ENOTFOUND)
-        return -1;
-    else if (!error) {
-        strncpy(buff, git_reference_shorthand(head), len);
-        git_reference_free(head);
-        return 0;
-    }
-    return -1;
+
+    err = git_repository_head(&head, repo);
+    ASSERT(err != GIT_EUNBORNBRANCH && err != GIT_ENOTFOUND);
+
+    strncpy(buff, git_reference_shorthand(head), len);
+    git_reference_free(head);
+
+cleanup:
+    return err;
 }
 
 void print_status_entry(const git_status_entry *entry, char *buff, size_t len) {
@@ -255,14 +283,18 @@ void print_status_entry(const git_status_entry *entry, char *buff, size_t len) {
     }
 }
 
-void print_status(WINDOW *win, git_repository *repo) {
+err_t print_status(WINDOW *win, git_repository *repo) {
+    err_t err = NO_ERROR;
     char buff[200];
     git_status_list *status_list;
     git_status_options opts = {.version = GIT_STATUS_OPTIONS_VERSION,
                                .flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED,
                                .show = GIT_STATUS_SHOW_INDEX_ONLY};
 
-    git_status_list_new(&status_list, repo, &opts);
+    ASSERT(win);
+    ASSERT(repo);
+
+    ASSERT_LIBGIT2(git_status_list_new(&status_list, repo, &opts));
 
     int line = 1;
 
@@ -325,38 +357,37 @@ void print_status(WINDOW *win, git_repository *repo) {
     }
     wcolor_set(win, 0, NULL);
     git_status_list_free(status_list);
+
+cleanup:
+    return err;
 }
 
 int main() {
-    char cwd[PATH_MAX];
-    char head_name[100];
-    WINDOW *win;
+    err_t err = NO_ERROR;
+    char cwd[PATH_MAX] = {0};
+    char head_name[100] = {0};
     struct refs refs = LIST_HEAD_INITIALIZER();
-
-    if ((win = initscr()) == NULL) {
-        exit(1);
-    }
-
-    if (getcwd(cwd, PATH_MAX) == NULL) {
-        exit(1);
-    }
-
-    git_libgit2_init();
     git_repository *repo = NULL;
-    git_repository_init(&repo, cwd, false);
+    WINDOW *win = NULL;
 
-    curs_set(0);
-    start_color();
-    use_default_colors();
+    ASSERT(win = initscr());
+    ASSERT(getcwd(cwd, PATH_MAX));
 
-    init_pair(COLOR_STAGED, COLOR_GREEN, -1);
-    init_pair(COLOR_NOT_STAGED, COLOR_RED, -1);
-    init_pair(COLOR_UNTRACKED, COLOR_RED, -1);
-    init_pair(COLOR_TITLE, COLOR_BLACK, COLOR_WHITE);
-    init_pair(COLOR_COMMIT_HASH, COLOR_BLUE, -1);
-    init_pair(COLOR_COMMIT_TITLE, -1, -1);
-    init_pair(COLOR_COMMIT_DATE, -1, -1);
-    init_pair(COLOR_COMMIT_USER, -1, -1);
+    ASSERT(git_libgit2_init() > 0);
+    ASSERT(git_repository_init(&repo, cwd, false) == 0);
+
+    ASSERT_LIBGIT2(curs_set(0));
+    ASSERT_LIBGIT2(start_color());
+    ASSERT_LIBGIT2(use_default_colors());
+
+    ASSERT_LIBGIT2(init_pair(COLOR_STAGED, COLOR_GREEN, -1));
+    ASSERT_LIBGIT2(init_pair(COLOR_NOT_STAGED, COLOR_RED, -1));
+    ASSERT_LIBGIT2(init_pair(COLOR_UNTRACKED, COLOR_RED, -1));
+    ASSERT_LIBGIT2(init_pair(COLOR_TITLE, COLOR_BLACK, COLOR_WHITE));
+    ASSERT_LIBGIT2(init_pair(COLOR_COMMIT_HASH, COLOR_BLUE, -1));
+    ASSERT_LIBGIT2(init_pair(COLOR_COMMIT_TITLE, -1, -1));
+    ASSERT_LIBGIT2(init_pair(COLOR_COMMIT_DATE, -1, -1));
+    ASSERT_LIBGIT2(init_pair(COLOR_COMMIT_USER, -1, -1));
 
     int third = getmaxy(win) / 3;
     int leftover = getmaxy(win) - third * 3;
@@ -364,13 +395,16 @@ int main() {
     WINDOW *topwin = newwin(getmaxy(win) / 3 + (leftover ? 1 : 0), 0, 0, 0);
     WINDOW *middlewin = newwin(getmaxy(win) / 3 + (leftover == 2 ? 1 : 0), 0, getmaxy(win) / 3 + (leftover ? 1 : 0), 0);
     WINDOW *bottomwin = newwin(getmaxy(win) / 3, 0, getmaxy(win) / 3 * 2 + leftover, 0);
+    ASSERT(topwin);
+    ASSERT(middlewin);
+    ASSERT(bottomwin);
 
     while (1) {
-        print_status(topwin, repo);
-        get_latest_refs(&refs, repo, getmaxy(middlewin) - 2);
-        print_refs(middlewin, &refs);
-        clear_refs(&refs);
-        print_latest_commits(bottomwin, repo, getmaxy(win) / 3);
+        RETHROW(print_status(topwin, repo));
+        RETHROW(get_latest_refs(&refs, repo, getmaxy(middlewin) - 2));
+        RETHROW(print_refs(middlewin, &refs));
+        RETHROW(clear_refs(&refs));
+        RETHROW(print_latest_commits(bottomwin, repo, getmaxy(win) / 3));
 
         wcolor_set(topwin, COLOR_TITLE, NULL);
         for (int i = 0; i < getmaxx(topwin); i++) {
@@ -412,8 +446,9 @@ int main() {
         usleep(10000);
     }
 
+cleanup:
     delwin(win);
     endwin();
     refresh();
-    return 0;
+    return err;
 }
