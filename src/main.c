@@ -445,7 +445,7 @@ int main() {
     while (1) {
         struct pollfd pollfds[1] = {{.fd = inotify, .events = POLLIN , .revents = 0}};
         int changed = poll(pollfds, 1, 100);
-        if (changed) {
+        if (changed == 1) {
             char buff[sizeof(struct inotify_event) + NAME_MAX + 1] = {0};
             read(inotify, buff, sizeof(buff));
         }
