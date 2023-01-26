@@ -1,3 +1,4 @@
+#include "../lib/err.h"
 #include <curses.h>
 #include <git2.h>
 #include <limits.h>
@@ -7,7 +8,6 @@
 #include <string.h>
 #include <sys/queue.h>
 #include <unistd.h>
-#include "../lib/err.h"
 
 #define REFLOG_CO_PREFIX "checkout:"
 
@@ -364,8 +364,8 @@ cleanup:
 
 int main() {
     err_t err = NO_ERROR;
-    char cwd[PATH_MAX] = { 0 };
-    char head_name[100] = { 0 };
+    char cwd[PATH_MAX] = {0};
+    char head_name[100] = {0};
     struct refs refs = LIST_HEAD_INITIALIZER();
     git_repository *repo = NULL;
     WINDOW *win = NULL;
