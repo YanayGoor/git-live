@@ -14,6 +14,8 @@ jobs:
         fetch-depth: 0
     - name: Install make
       run: sudo apt install make
+    - name: Install deps
+      run: sudo apt install libgit2 ncurses
     - name: Build
       run: make deb
     - name: Upload package
