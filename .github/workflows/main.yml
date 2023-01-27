@@ -28,7 +28,7 @@ jobs:
         path: "*.deb"
   publish:
     needs: build
-    runs-on: ubuntu-lastest
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/download-artifact@v3
       with:
