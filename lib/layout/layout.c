@@ -405,6 +405,9 @@ static err_t free_node(struct node *node) {
 
     ASSERT(node);
 
+    if (node->content != NULL) {
+        free(node->content);
+    }
     free(node);
 
 cleanup:
@@ -459,7 +462,8 @@ err_t clear_children(struct node *parent) {
     while (!LIST_EMPTY(&parent->nodes)) {
         struct node *elm = LIST_FIRST(&parent->nodes);
         LIST_REMOVE(elm, entry);
-        free_node(elm);
+        RETHROW(clear_children(elm));
+        RETHROW(free_node(elm));
     }
 
 cleanup:
