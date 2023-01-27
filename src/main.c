@@ -4,15 +4,16 @@
 #include <curses.h>
 #include <git2.h>
 #include <limits.h>
+#include <poll.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/queue.h>
-#include <unistd.h>
 #include <sys/inotify.h>
-#include <poll.h>
+#include <sys/queue.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 #define REFLOG_CO_PREFIX "checkout:"
 
@@ -37,6 +38,7 @@
 #define WATCH_INVALID (-1)
 
 #define ASSERT_LIBGIT2(expr) ASSERT(expr != ERR)
+#define ASSERT_LIBGIT2_PRINT(expr) ASSERT_PRINT(expr != ERR)
 
 struct ref {
     char *name;
@@ -45,6 +47,8 @@ struct ref {
 };
 
 LIST_HEAD(refs, ref);
+
+static volatile bool keep_running = TRUE;
 
 void get_human_readable_time(git_time_t t, char *buff, size_t len) {
     int64_t diff = time(NULL) - t;
@@ -71,7 +75,7 @@ const char *get_checkout_reflog_target(const git_reflog_entry *entry) {
     return strrchr(message, ' ') + 1;
 }
 
-struct ref *create_ref(const char *target, int index) {
+struct ref *create_ref(const char *target, size_t index) {
     struct ref *ref = malloc(sizeof(struct ref));
     ref->index = index;
     ref->name = malloc(strlen(target) + 1);
@@ -79,9 +83,16 @@ struct ref *create_ref(const char *target, int index) {
     return ref;
 }
 
-void free_ref(struct ref *ref) {
+err_t free_ref(struct ref *ref) {
+    err_t err = NO_ERROR;
+
+    ASSERT(ref);
+
     free(ref->name);
     free(ref);
+
+cleanup:
+    return err;
 }
 
 bool refs_append_unique(struct refs *list, struct ref *ref) {
@@ -120,16 +131,20 @@ err_t get_latest_refs(struct refs *out, git_repository *repo, size_t max) {
             continue;
 
         const char *target = get_checkout_reflog_target(entry);
-        if (refs_append_unique(out, create_ref(target, index))) {
-            collected++;
+        struct ref *ref = create_ref(target, index);
+
+        if (!refs_append_unique(out, ref)) {
+            RETHROW(free_ref(ref));
+            continue;
         }
 
+        collected++;
         if (collected == max)
             break;
     }
 
-    git_reflog_free(reflog);
 cleanup:
+    git_reflog_free(reflog);
     return err;
 }
 
@@ -141,17 +156,10 @@ err_t clear_refs(struct refs *refs) {
     struct ref *first;
     while ((first = LIST_FIRST(refs)) != NULL) {
         LIST_REMOVE(first, entry);
-        free_ref(first);
+        RETHROW(free_ref(first));
     }
 cleanup:
     return err;
-}
-
-size_t get_refs_max_width(struct refs *refs) {
-    struct ref *curr;
-    size_t max = 0;
-    LIST_FOREACH(curr, refs, entry) { max = MAX(max, strlen(curr->name)); }
-    return max;
 }
 
 void get_co_command(char *out, size_t maxlen, size_t index) {
@@ -261,6 +269,8 @@ err_t print_latest_commits(struct node *node, git_repository *repo, int max) {
             break;
     }
 
+    git_revwalk_free(walker);
+
 cleanup:
     return err;
 }
@@ -369,7 +379,7 @@ cleanup:
     return err;
 }
 
-err_t try_initialize_inotify(char *path, int* out) {
+err_t try_initialize_inotify(char *path, int *out) {
     err_t err = NO_ERROR;
 
     ASSERT(path);
@@ -377,10 +387,12 @@ err_t try_initialize_inotify(char *path, int* out) {
     *out = INOTIFY_INVALID;
 
     int inotify = inotify_init();
-    if (inotify == INOTIFY_INVALID) goto cleanup;
+    if (inotify == INOTIFY_INVALID)
+        goto cleanup;
 
     int watch = inotify_add_watch(inotify, path, IN_MODIFY);
-    if (watch == WATCH_INVALID) goto cleanup;
+    if (watch == WATCH_INVALID)
+        goto cleanup;
 
     *out = inotify;
 
@@ -401,7 +413,7 @@ cleanup:
 
 err_t wait_for_inotify_message(int inotify, int timeout) {
     err_t err = NO_ERROR;
-    struct pollfd pollfds[1] = {{.fd = inotify, .events = POLLIN , .revents = 0}};
+    struct pollfd pollfds[1] = {{.fd = inotify, .events = POLLIN, .revents = 0}};
 
     ASSERT(inotify != INOTIFY_INVALID);
 
@@ -425,6 +437,8 @@ cleanup:
     return err;
 }
 
+void interrupt_handler() { keep_running = 0; }
+
 int main() {
     err_t err = NO_ERROR;
     char cwd[PATH_MAX] = {0};
@@ -441,6 +455,8 @@ int main() {
     WINDOW *win = NULL;
     git_repository *repo = NULL;
     int inotify = INOTIFY_INVALID;
+
+    signal(SIGINT, interrupt_handler);
 
     ASSERT(win = initscr());
     ASSERT(getcwd(cwd, PATH_MAX));
@@ -501,7 +517,7 @@ int main() {
 
     RETHROW(try_initialize_inotify(buf.ptr, &inotify));
 
-    while (1) {
+    while (keep_running) {
         if (inotify == INOTIFY_INVALID) {
             RETHROW(wait_for_ms(50));
         } else {
@@ -566,8 +582,11 @@ int main() {
     }
 
 cleanup:
-    delwin(win);
-    endwin();
-    refresh();
+    git_buf_free(&buf);
+    git_repository_free(repo);
+    RETHROW_PRINT(clear_refs(&refs));
+    RETHROW_PRINT(free_layout(layout));
+    ASSERT_LIBGIT2_PRINT(delwin(win));
+    ASSERT_LIBGIT2_PRINT(endwin());
     return err;
 }
