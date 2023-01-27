@@ -54,6 +54,7 @@ deb: $(NAME)
 	RESULT=`dpkg-shlibdeps -O $(NAME)` && echo "Depends: $${RESULT#'shlibs:Depends='}" >> $(DEB_PATH)/DEBIAN/control
 	rm -r debian
 	dpkg-deb --build --root-owner-group $(DEB_PATH)
+	dpkg-name $(DEB_PATH).deb
 
 
 .PHONY: clean all
