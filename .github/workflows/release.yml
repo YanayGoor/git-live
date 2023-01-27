@@ -16,7 +16,9 @@ jobs:
     - name: Install make
       run: sudo apt install make
     - name: Build
-      run: make deb
+      run: |
+        echo $PWD
+        make deb
     - name: Upload package
       uses: actions/upload-artifact@v3
       with:
