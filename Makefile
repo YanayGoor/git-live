@@ -39,6 +39,7 @@ format:
 	$(MAKE) -C lib/layout format
 
 deb: $(NAME)
+	@echo test
 	rm -rf $(DEB_PATH)
 	mkdir $(DEB_PATH)
 	mkdir -p $(DEB_PATH)/usr/bin
