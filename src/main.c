@@ -135,6 +135,7 @@ err_t get_latest_refs(struct refs *out, git_repository *repo, size_t max) {
 
         if (!refs_append_unique(out, ref)) {
             RETHROW(free_ref(ref));
+            continue;
         }
 
         collected++;
