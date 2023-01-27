@@ -27,6 +27,7 @@ jobs:
         name: ${{ matrix.os }} package
         path: "*.deb"
   publish:
+    needs: build
     runs-on: ubuntu-lastest
     steps:
     - uses: actions/download-artifact@v3
