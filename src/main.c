@@ -75,7 +75,7 @@ const char *get_checkout_reflog_target(const git_reflog_entry *entry) {
     return strrchr(message, ' ') + 1;
 }
 
-struct ref *create_ref(const char *target, int index) {
+struct ref *create_ref(const char *target, size_t index) {
     struct ref *ref = malloc(sizeof(struct ref));
     ref->index = index;
     ref->name = malloc(strlen(target) + 1);
@@ -160,13 +160,6 @@ err_t clear_refs(struct refs *refs) {
     }
 cleanup:
     return err;
-}
-
-size_t get_refs_max_width(struct refs *refs) {
-    struct ref *curr;
-    size_t max = 0;
-    LIST_FOREACH(curr, refs, entry) { max = MAX(max, strlen(curr->name)); }
-    return max;
 }
 
 void get_co_command(char *out, size_t maxlen, size_t index) {
