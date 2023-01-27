@@ -1,5 +1,8 @@
 name: Release
-on: [push]
+on:
+  push:
+    tags:
+      - "v*"
   
 jobs:
   build:
@@ -23,3 +26,16 @@ jobs:
       with:
         name: ${{ matrix.os }} package
         path: "*.deb"
+  publish:
+    runs-on: ubuntu-lastest
+    steps:
+    - uses: actions/download-artifact@v3
+      with:
+        path: packages
+    - name: Create release
+      uses: "marvinpinto/action-automatic-releases@latest"
+      with:
+        repo_token: "${{ secrets.GITHUB_TOKEN }}"
+        prerelease: false
+        files: |
+          packages/*/*.deb
