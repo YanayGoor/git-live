@@ -15,7 +15,7 @@ jobs:
     - name: Install make
       run: sudo apt install make
     - name: Install deps
-      run: sudo apt install libgit2 ncurses
+      run: sudo apt install libgit2-dev libncurses-dev
     - name: Build
       run: make deb
     - name: Upload package
