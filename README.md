@@ -5,11 +5,11 @@ Live dashboard for a git repository
 
 :white_check_mark: No need to run `git status` or `git log` after everything you do
 
-:white_check_mark: Never forget the names of you recently visited branches
+:white_check_mark: Never forget the names of your recently visited branches
 
 
 ## Can I perform git actions through the dashboard?
-This dashboard is designed for use in a tmux environment, and therefore can only display information.
+This dashboard is designed for use in a tmux environment, where you it will be faster to type commands in one of the other panes, therefore the dashboard only displays information.
 
 ## How does it look?
 
