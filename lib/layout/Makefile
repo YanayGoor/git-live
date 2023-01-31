@@ -2,7 +2,7 @@ NAME := liblayout
 
 CC = gcc
 LD = ld
-CFLAGS := -Wall -Wextra -Werror -g
+CFLAGS := -Wall -Wextra -Werror -g  -std=c11 -D_BSD_SOURCE -D_DEFAULT_SOURCE
 
 SRC += layout.c
 OBJ = $(patsubst %.c,%.o,$(SRC))

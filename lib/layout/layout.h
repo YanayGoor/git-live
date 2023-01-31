@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <ncurses.h>
+#include <stdint.h>
 #include "../err.h"
 
 enum nodes_direction {
@@ -32,7 +33,7 @@ struct node {
   LIST_HEAD(,node) nodes;
   char *content;
   attr_t attr;
-  NCURSES_PAIRS_T color;
+  short color;
 };
 
 typedef err_t (draw_text_t)(void* arg, const char* text, uint32_t len, uint32_t col, uint32_t row, int color, int attrs);

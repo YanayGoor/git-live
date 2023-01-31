@@ -6,7 +6,7 @@ do {                                           \
     if (LIST_EMPTY(head)) {                    \
         LIST_INSERT_HEAD(head, elm, field);    \
     } else {                                   \
-        typeof(elm) __last = LIST_FIRST(head); \
+        __typeof__(elm) __last = LIST_FIRST(head); \
         while (LIST_NEXT(__last, field)) {     \
             __last = LIST_NEXT(__last, field); \
         }                                      \
