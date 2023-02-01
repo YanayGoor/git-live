@@ -8,24 +8,30 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-22.04]
-    runs-on: ${{ matrix.os }}
+        os: ["ubuntu:22.04", "centos:centos7"]
+        include:
+          - os: ubuntu:22.04
+            install: apt update && apt install -y gcc make libgit2-dev libncurses-dev dpkg-dev
+            target: deb
+          - os: centos:centos7
+            install: yum install -y make gcc rpmdevtools rpmlint libgit2-devel ncurses-devel ncurses-libs
+            target: rpm
+    runs-on: ubuntu-latest
+    container: ${{ matrix.os }}
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
       with:
         fetch-depth: 0
-    - name: Install make
-      run: sudo apt install make
     - name: Install deps
-      run: sudo apt install libgit2-dev libncurses-dev
+      run: ${{ matrix.install }}
     - name: Build
-      run: make deb
+      run: make ${{ matrix.target }}
     - name: Upload package
       uses: actions/upload-artifact@v3
       with:
-        name: ${{ matrix.os }} package
-        path: "*.deb"
+        name: built package
+        path: "build/*"
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -37,5 +43,5 @@ jobs:
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        file: packages/*/*.deb
+        file: packages/*/*
         file_glob: true

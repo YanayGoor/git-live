@@ -54,12 +54,12 @@ deb: $(NAME)
 	RESULT=`dpkg-shlibdeps -O $(NAME)` && echo "Depends: $${RESULT#'shlibs:Depends='}" >> $(DEB_PATH)/DEBIAN/control
 	rm -r debian
 	dpkg-deb --build --root-owner-group $(DEB_PATH)
-	dpkg-name $(DEB_PATH).deb
-
+	mkdir -p build/
+	mv $(DEB_PATH).deb build/
+	
 
 rpm:
 	rm -rf ~/rpmbuild
-	sudo yum install -y rpmdevtools rpmlint
 	rpmdev-setuptree
 	tar --create --file $(NAME)-$(VERSION).tar.gz src/ lib/
 	mv $(NAME)-$(VERSION).tar.gz ~/rpmbuild/SOURCES
@@ -81,6 +81,8 @@ rpm:
 	echo "/usr/bin/git-live" >> ~/rpmbuild/SPECS/$(NAME).spec
 	cp $(NAME) ~/rpmbuild/SOURCES
 	rpmbuild -ba  ~/rpmbuild/SPECS/$(NAME).spec
+	mkdir -p build/
+	cp ~/rpmbuild/RPMS/*/git-live* build
 	
 
 .PHONY: clean all
