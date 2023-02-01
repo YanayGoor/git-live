@@ -25,7 +25,7 @@ struct size {
 
 static uint32_t get_width(struct node *node, struct size max_size);
 static uint32_t get_height(struct node *node, struct size max_size);
-static err_t print_node(struct layout *layout, struct node *node, struct rect rect, NCURSES_PAIRS_T color_top);
+static err_t print_node(struct layout *layout, struct node *node, struct rect rect, short color_top);
 
 static uint32_t get_str_width(const char *str) {
     uint32_t sz = 0;
@@ -214,7 +214,7 @@ static uint32_t get_height(struct node *node, struct size max_size) {
 }
 
 static err_t print_nodes(struct layout *layout, struct node *nodes, int32_t len, enum nodes_direction direction,
-                         struct rect rect, NCURSES_PAIRS_T color_top) {
+                         struct rect rect, short color_top) {
     err_t err = NO_ERROR;
     int32_t max_size = direction == nodes_direction_columns ? rect.width : rect.height;
     int32_t min_sizes_sum = 0;
@@ -305,7 +305,7 @@ cleanup:
     return err;
 }
 
-static err_t print_wrapped_node(struct layout *layout, struct node *node, struct rect rect, NCURSES_PAIRS_T color) {
+static err_t print_wrapped_node(struct layout *layout, struct node *node, struct rect rect, short color) {
     err_t err = NO_ERROR;
 
     ASSERT(layout);
@@ -357,7 +357,7 @@ cleanup:
     return err;
 }
 
-static err_t print_node(struct layout *layout, struct node *node, struct rect rect, NCURSES_PAIRS_T color_top) {
+static err_t print_node(struct layout *layout, struct node *node, struct rect rect, short color_top) {
     err_t err = NO_ERROR;
 
     ASSERT(layout);

@@ -3,7 +3,7 @@
 #include "ncurses_layout.h"
 #include <curses.h>
 #include <git2.h>
-#include <limits.h>
+#include <linux/limits.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
