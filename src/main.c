@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "../lib/err.h"
 #include "../lib/layout/layout.h"
 #include "ncurses_layout.h"
@@ -14,6 +15,7 @@
 #include <sys/queue.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #define REFLOG_CO_PREFIX "checkout:"
 
@@ -291,7 +293,40 @@ cleanup:
     return err;
 }
 
-void print_status_entry(const git_status_entry *entry, char *buff, size_t len) {
+char *str_find_right(char* buff, unsigned long maxlen, char sep) {
+    char* curr = buff + MIN(strlen(buff), maxlen);
+    while (curr >= buff) {
+        if (*curr == sep) {
+            return curr;
+        }
+        curr--;
+    }
+    return NULL;
+}
+
+err_t relative_to(char* curr_pwd, const char* rel_path, char* new_pwd, char* out_buff, unsigned long out_len) {
+    char fullpath[200] = {0};
+    snprintf(fullpath, sizeof(fullpath) - 1, "%s/%s", curr_pwd, rel_path);
+
+    int count = 0;
+    unsigned long len = strlen(new_pwd);
+    while (count < 20) {
+        if (!strncmp(fullpath, new_pwd, len - 1)) {
+            break;
+        }
+        count++;
+        len = str_find_right(new_pwd, len - 1, '/') - new_pwd;
+    }
+    for (int i =0; i < count; i++) {
+        strncpy(out_buff, "../", MIN(out_len, 3));
+        out_buff += MIN(out_len, 3);
+        out_len -= MIN(out_len, 3);
+    }
+    strncpy(out_buff, fullpath + len + 1, MIN(out_len, len));
+    return 0;
+}
+
+void print_status_entry(char* pwd, char* new_pwd, const git_status_entry *entry, char *buff, size_t len) {
     const char *status = "";
     if (entry->status & (GIT_STATUS_INDEX_NEW | GIT_STATUS_WT_NEW)) {
         status = "new";
@@ -307,7 +342,9 @@ void print_status_entry(const git_status_entry *entry, char *buff, size_t len) {
             snprintf(buff, len, "   %s: %s->%s", status, entry->head_to_index->old_file.path,
                      entry->head_to_index->new_file.path);
         } else {
-            snprintf(buff, len, "   %s: %s", status, entry->head_to_index->new_file.path);
+            char filename[200] = {0};
+            relative_to(pwd, entry->head_to_index->new_file.path, new_pwd, filename, sizeof(filename) - 1);
+            snprintf(buff, len, "   %s: %s", status, filename);
         }
     }
     if (entry->index_to_workdir) {
@@ -315,7 +352,9 @@ void print_status_entry(const git_status_entry *entry, char *buff, size_t len) {
             snprintf(buff, len, "   %s: %s->%s", status, entry->index_to_workdir->old_file.path,
                      entry->index_to_workdir->new_file.path);
         } else {
-            snprintf(buff, len, "   %s: %s", status, entry->index_to_workdir->new_file.path);
+            char filename[200] = {0};
+            relative_to(pwd, entry->index_to_workdir->new_file.path, new_pwd, filename, sizeof(filename) - 1);
+            snprintf(buff, len, "   %s: %s", status, filename);
         }
     }
 }
@@ -339,7 +378,7 @@ cleanup:
     return err;
 }
 
-err_t print_status(struct node *node, git_repository *repo) {
+err_t print_status(char* pwd, char* new_pwd, struct node *node, git_repository *repo) {
     err_t err = NO_ERROR;
     char buff[200] = {0};
     git_status_list *status_list;
@@ -357,7 +396,7 @@ err_t print_status(struct node *node, git_repository *repo) {
     append_text(node, " staged:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
         const git_status_entry *entry = git_status_byindex(status_list, i);
-        print_status_entry(entry, buff, 200);
+        print_status_entry(pwd, new_pwd, entry, buff, 200);
         append_styled_text(node, buff, COLOR_STAGED, 0);
     }
     git_status_list_free(status_list);
@@ -369,7 +408,7 @@ err_t print_status(struct node *node, git_repository *repo) {
     append_text(node, " changed:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
         const git_status_entry *entry = git_status_byindex(status_list, i);
-        print_status_entry(entry, buff, 200);
+        print_status_entry(pwd, new_pwd, entry, buff, 200);
         append_styled_text(node, buff, COLOR_NOT_STAGED, 0);
     }
     git_status_list_free(status_list);
@@ -385,7 +424,7 @@ err_t print_status(struct node *node, git_repository *repo) {
         if (entry->index_to_workdir && entry->index_to_workdir->status != GIT_DELTA_UNTRACKED) {
             continue;
         }
-        print_status_entry(entry, buff, 200);
+        print_status_entry(pwd, new_pwd, entry, buff, 200);
         append_styled_text(node, buff, COLOR_UNTRACKED, 0);
     }
     git_status_list_free(status_list);
@@ -451,12 +490,20 @@ err_t wait_for_ms(int timeout) {
 cleanup:
     return err;
 }
+//
+//err_t get_homedir
+//const char *homedir;
+//
+//if ((homedir = getenv("HOME")) == NULL) {
+//homedir = getpwuid(getuid())->pw_dir;
+//}
 
 void interrupt_handler() { keep_running = 0; }
 
 int main() {
     err_t err = NO_ERROR;
     char cwd[PATH_MAX] = {0};
+    char new_pwd[PATH_MAX] = {0};
     char head_name[100] = {0};
     git_buf buf = {NULL, 0, 0};
     struct refs refs = LIST_HEAD_INITIALIZER();
@@ -473,8 +520,11 @@ int main() {
 
     signal(SIGINT, interrupt_handler);
 
+    //    RETHROW(try_initialize_inotify("~/.git-live/1", &inotify));
+
     ASSERT(win = initscr());
     ASSERT(getcwd(cwd, PATH_MAX));
+    ASSERT(getcwd(new_pwd, PATH_MAX));
     ASSERT(git_libgit2_init() > 0);
     ASSERT(!git_repository_discover(&buf, cwd, 0, NULL));
     ASSERT(!git_repository_open(&repo, buf.ptr));
@@ -532,7 +582,34 @@ int main() {
 
     RETHROW(try_initialize_inotify(buf.ptr, &inotify));
 
+    char hex[5] = {0};
+    int r = rand();      // Returns a pseudo-random integer between 0 and RAND_MAX.
+    snprintf(hex, 5, "%02x", r);
+
     while (keep_running) {
+
+        int fd = open("/home/yanay/.git-live/1", O_RDONLY);
+        if (fd == -1) goto next;
+
+        char hash[9] = {0};
+        ssize_t res = read(fd, hash, sizeof(hash) - 1);
+        if (res <= 0) goto next;
+
+        char path[512] = {0};
+        sprintf(path, "%s/%s", "/home/yanay/.git-live", hash);
+
+        int fd2 = open(path, O_RDONLY);
+        if (fd2 == -1) goto next;
+
+
+        res = read(fd2, new_pwd, sizeof(new_pwd));
+        new_pwd[res - 1] = '\0';
+        if (res <= 0) goto next;
+
+//        strncpy(cwd, new_pwd, res);
+//        cwd[res] = '\0';
+
+    next:
         if (inotify == INOTIFY_INVALID) {
             RETHROW(wait_for_ms(50));
         } else {
@@ -545,7 +622,7 @@ int main() {
         struct node *branch = NULL;
         struct node *padding = NULL;
 
-        RETHROW(print_status(top, repo));
+        RETHROW(print_status(cwd, new_pwd, top, repo));
 
         RETHROW(get_latest_refs(&refs, repo, getmaxy(win) - 2)); // we get more and some will be hidden
         RETHROW(print_refs(middle, &refs));
@@ -568,6 +645,10 @@ int main() {
         title->padding_left = 1;
         title->padding_right = 1;
         RETHROW(append_text(title, "Git Live"));
+        RETHROW(append_text(title, " (session "));
+        RETHROW(append_text(title, hex));
+        RETHROW(append_text(title, ")"));
+
 
         RETHROW(append_child(top_header, &top_header_right));
         top_header_right->expand = 1;
