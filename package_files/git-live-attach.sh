@@ -1,3 +1,3 @@
 #!/bin/sh
-tty_hash="`tty | sha256sum | head -c 8`"
-echo ${tty_hash} > ~/.git-live/${1}
+mkdir -p ~/.cache/git-live/attached/
+echo $GIT_LIVE_TTY_HASH > ~/.cache/git-live/attached/${1}

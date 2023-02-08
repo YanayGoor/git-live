@@ -76,6 +76,7 @@ deb: $(NAME)
 	mkdir -p $(DEB_PATH)/etc/profile.d/
 	cp package_files/$(NAME).sh $(DEB_PATH)/etc/profile.d/
 	cp package_files/$(NAME)-attach.sh $(DEB_PATH)/usr/bin/$(NAME)-attach
+	cp package_files/$(NAME)-dettach.sh $(DEB_PATH)/usr/bin/$(NAME)-dettach
 	cp $(NAME) $(DEB_PATH)/usr/bin/
 	mkdir -p $(DEB_PATH)/DEBIAN
 	touch $(DEB_PATH)/DEBIAN/control
