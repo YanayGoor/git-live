@@ -3,9 +3,11 @@
 #include "../lib/layout/layout.h"
 #include "ncurses_layout.h"
 #include <curses.h>
+#include <fcntl.h>
 #include <git2.h>
 #include <linux/limits.h>
 #include <poll.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -14,8 +16,6 @@
 #include <sys/inotify.h>
 #include <sys/queue.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <pwd.h>
 
 #define REFLOG_CO_PREFIX "checkout:"
 
@@ -38,6 +38,7 @@
 
 #define INOTIFY_INVALID (-1)
 #define WATCH_INVALID (-1)
+#define FD_INVALID (-1)
 
 #define ASSERT_NCURSES(expr) ASSERT(expr != ERR)
 #define ASSERT_NCURSES_PRINT(expr) ASSERT_PRINT(expr != ERR)
@@ -53,6 +54,20 @@ struct ref {
 LIST_HEAD(refs, ref);
 
 static volatile bool keep_running = TRUE;
+
+err_t safe_close_fd(int *fd) {
+    err_t err = NO_ERROR;
+
+    ASSERT(fd);
+
+    if (*fd != FD_INVALID) {
+        close(*fd);
+        *fd = FD_INVALID;
+    }
+
+cleanup:
+    return err;
+}
 
 void get_human_readable_time(git_time_t t, char *buff, size_t len) {
     int64_t diff = time(NULL) - t;
@@ -293,8 +308,8 @@ cleanup:
     return err;
 }
 
-char *str_find_right(char* buff, unsigned long maxlen, char sep) {
-    char* curr = buff + MIN(strlen(buff), maxlen);
+char *str_find_right(char *buff, unsigned long maxlen, char sep) {
+    char *curr = buff + MIN(strlen(buff), maxlen);
     while (curr >= buff) {
         if (*curr == sep) {
             return curr;
@@ -304,7 +319,7 @@ char *str_find_right(char* buff, unsigned long maxlen, char sep) {
     return NULL;
 }
 
-err_t relative_to(char* curr_pwd, const char* rel_path, char* new_pwd, char* out_buff, unsigned long out_len) {
+err_t relative_to(char *curr_pwd, const char *rel_path, char *new_pwd, char *out_buff, unsigned long out_len) {
     err_t err = NO_ERROR;
     char fullpath[PATH_MAX] = {0};
     snprintf(fullpath, sizeof(fullpath) - 1, "%s/%s", curr_pwd, rel_path);
@@ -325,7 +340,7 @@ err_t relative_to(char* curr_pwd, const char* rel_path, char* new_pwd, char* out
         count++;
         len = str_find_right(new_pwd, len - 1, '/') - new_pwd;
     }
-    for (int i =0; i < count; i++) {
+    for (int i = 0; i < count; i++) {
         strncpy(out_buff, "../", MIN(out_len, 3));
         out_buff += MIN(out_len, 3);
         out_len -= MIN(out_len, 3);
@@ -336,7 +351,7 @@ cleanup:
     return err;
 }
 
-void print_status_entry(char* pwd, char* new_pwd, const git_status_entry *entry, char *buff, size_t len) {
+void print_status_entry(char *pwd, char *new_pwd, const git_status_entry *entry, char *buff, size_t len) {
     const char *status = "";
     if (entry->status & (GIT_STATUS_INDEX_NEW | GIT_STATUS_WT_NEW)) {
         status = "new";
@@ -394,7 +409,7 @@ cleanup:
     return err;
 }
 
-err_t print_status(char* pwd, char* new_pwd, struct node *node, git_repository *repo) {
+err_t print_status(char *pwd, char *new_pwd, struct node *node, git_repository *repo) {
     err_t err = NO_ERROR;
     char buff[PATH_MAX] = {0};
     git_status_list *status_list;
@@ -506,16 +521,11 @@ err_t wait_for_ms(int timeout) {
 cleanup:
     return err;
 }
-//
-//err_t get_homedir
-//const char *homedir;
-//
-//if ((homedir = getenv("HOME")) == NULL) {
-//homedir = getpwuid(getuid())->pw_dir;
-//}
 
-err_t get_cache_dir(char* buff, uint32_t maxlen) {
+err_t get_cache_dir(char *buff, uint32_t maxlen) {
     err_t err = NO_ERROR;
+
+    ASSERT(buff);
 
     struct passwd *pw = getpwuid(getuid());
     const char *homedir = pw->pw_dir;
@@ -526,53 +536,89 @@ cleanup:
     return err;
 }
 
-err_t get_attached_terminal_hash(char *session_id, char* out, uint32_t out_len) {
+err_t get_attached_terminal_hash(char *session_id, char *out, uint32_t out_len) {
     err_t err = NO_ERROR;
-    char cache_dir[PATH_MAX] = { 0 };
-    char attached_file[PATH_MAX] = { 0 };
+    char cache_dir[PATH_MAX] = {0};
+    char attached_file[PATH_MAX] = {0};
+    int fd = FD_INVALID;
 
-    RETHROW(get_cache_dir(cache_dir , sizeof(cache_dir)));
+    ASSERT(session_id);
+    ASSERT(out);
 
-    snprintf(attached_file, sizeof(attached_file), "%s/%s/%s", cache_dir, "attached", session_id);
+    RETHROW(get_cache_dir(cache_dir, sizeof(cache_dir)));
 
-    int fd = open(attached_file, O_RDONLY);
-    if (fd == -1) goto cleanup;
+    uint32_t written = snprintf(attached_file, sizeof(attached_file), "%s/%s/%s", cache_dir, "attached", session_id);
+    ASSERT(written < sizeof(attached_file));
+
+    fd = open(attached_file, O_RDONLY);
+    if (fd == FD_INVALID)
+        goto cleanup;
 
     ssize_t res = read(fd, out, out_len);
-    if (res <= 0) goto cleanup;
+    if (res <= 0)
+        goto cleanup;
 
 cleanup:
-    close(fd);
+    RETHROW_PRINT(safe_close_fd(&fd));
     return err;
 }
 
-err_t get_terminal_workdir(char *terminal_hash, char* out, uint32_t out_len) {
+err_t get_terminal_workdir_path(char *terminal_hash, char *out, uint32_t out_len) {
     err_t err = NO_ERROR;
-    char cache_dir[PATH_MAX] = { 0 };
-    char attached_file[PATH_MAX] = { 0 };
+    char cache_dir[PATH_MAX] = {0};
 
-    RETHROW(get_cache_dir(cache_dir , sizeof(cache_dir)));
+    ASSERT(terminal_hash);
+    ASSERT(out);
 
-    snprintf(attached_file, sizeof(attached_file), "%s/%s/%s", cache_dir, "workdirs", terminal_hash);
+    RETHROW(get_cache_dir(cache_dir, sizeof(cache_dir)));
 
-    int fd2 = open(attached_file, O_RDONLY);
-    if (fd2 == -1) goto cleanup;
+    uint32_t written = snprintf(out, out_len, "%s/%s/%s", cache_dir, "workdirs", terminal_hash);
+    ASSERT(written < out_len);
 
-    ssize_t res = read(fd2, out, out_len);
+cleanup:
+    return err;
+}
+
+err_t get_terminal_workdir(char *terminal_workdir_path, char *out, uint32_t out_len) {
+    err_t err = NO_ERROR;
+
+    int fd = open(terminal_workdir_path, O_RDONLY);
+    if (fd == -1)
+        goto cleanup;
+
+    ssize_t res = read(fd, out, out_len);
     out[res - 1] = '\0'; // override newline with null terminator
-    if (res <= 0) goto cleanup;
+    if (res <= 0)
+        goto cleanup;
 
 cleanup:
-    close(fd2);
+    RETHROW_PRINT(safe_close_fd(&fd));
     return err;
 }
 
-err_t get_attached_terminal_workdir(char *session_id, char* out, uint32_t out_len) {
+err_t try_get_attached_terminal_workdir(char *session_id, char *out, uint32_t out_len, char *inotify_watch_path,
+                                        uint32_t inotify_watch_path_len) {
     err_t err = NO_ERROR;
-    char terminal_hash[9] = { 0 };
+    char terminal_hash[9] = {0};
+    char terminal_workdir_path[PATH_MAX] = {0};
 
     RETHROW(get_attached_terminal_hash(session_id, terminal_hash, sizeof(terminal_hash) - 1));
-    RETHROW(get_terminal_workdir(terminal_hash, out, out_len));
+    RETHROW(get_terminal_workdir_path(terminal_hash, terminal_workdir_path, sizeof(terminal_workdir_path) - 1));
+    RETHROW(get_terminal_workdir(terminal_workdir_path, out, out_len));
+
+    strncpy(inotify_watch_path, terminal_workdir_path, inotify_watch_path_len);
+
+cleanup:
+    return err;
+}
+
+err_t gen_session_id(char *out, uint32_t out_len) {
+    err_t err = NO_ERROR;
+
+    ASSERT(out);
+
+    srand(time(NULL));
+    snprintf(out, out_len, "%02x", rand());
 
 cleanup:
     return err;
@@ -584,7 +630,10 @@ int main() {
     err_t err = NO_ERROR;
     char cwd[PATH_MAX] = {0};
     char new_pwd[PATH_MAX] = {0};
+    char prev_inotify_new_pwd_path[PATH_MAX] = {0};
+    char inotify_new_pwd_path[PATH_MAX] = {0};
     char head_name[100] = {0};
+    char hex[5] = {0};
     git_buf buf = {NULL, 0, 0};
     struct refs refs = LIST_HEAD_INITIALIZER();
     struct layout *layout = NULL;
@@ -601,14 +650,14 @@ int main() {
 
     signal(SIGINT, interrupt_handler);
 
-    //    RETHROW(try_initialize_inotify("~/.git-live/1", &inotify));
-
     ASSERT(win = initscr());
     ASSERT(getcwd(cwd, PATH_MAX));
     ASSERT(getcwd(new_pwd, PATH_MAX));
     ASSERT(git_libgit2_init() > 0);
     ASSERT(!git_repository_discover(&buf, cwd, 0, NULL));
     ASSERT(!git_repository_open(&repo, cwd));
+
+    RETHROW(gen_session_id(hex, sizeof(hex)));
 
     ASSERT_NCURSES(curs_set(0));
     ASSERT_NCURSES(start_color());
@@ -663,10 +712,6 @@ int main() {
 
     RETHROW(try_initialize_inotify(buf.ptr, &inotify));
 
-    char hex[5] = {0};
-    int r = rand();      // Returns a pseudo-random integer between 0 and RAND_MAX.
-    snprintf(hex, 5, "%02x", r);
-
     while (keep_running) {
         if (inotify == INOTIFY_INVALID) {
             RETHROW(wait_for_ms(50));
@@ -674,15 +719,17 @@ int main() {
             RETHROW(wait_for_inotify_message(inotify, 100));
         }
 
-        memcpy(new_pwd, cwd, sizeof(new_pwd));
-        RETHROW(get_attached_terminal_workdir(hex, new_pwd, sizeof(new_pwd)));
+        memcpy(new_pwd, cwd, sizeof(new_pwd) - 1);
+        RETHROW(try_get_attached_terminal_workdir(hex, new_pwd, sizeof(new_pwd) - 1, inotify_new_pwd_path,
+                                                  sizeof(inotify_new_pwd_path) - 1));
 
-//        if (inotify != -1) {
-//            if (inotify_pwd_path != -1) {
-//                inotify_rm_watch(inotify, inotify_pwd_path);
-//            }
-//            inotify_pwd_path = inotify_add_watch(inotify, path, IN_MODIFY);
-//        }
+        if (inotify != -1 && memcmp(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path))) {
+            if (inotify_pwd_path != INOTIFY_INVALID) {
+                inotify_rm_watch(inotify, inotify_pwd_path);
+            }
+            inotify_pwd_path = inotify_add_watch(inotify, inotify_new_pwd_path, IN_MODIFY);
+        }
+        memcpy(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path));
 
         struct node *top_header_left = NULL;
         struct node *title = NULL;
