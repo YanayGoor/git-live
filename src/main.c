@@ -626,7 +626,7 @@ cleanup:
 
 void interrupt_handler() { keep_running = 0; }
 
-int main() {
+int _main() {
     err_t err = NO_ERROR;
     char cwd[PATH_MAX] = {0};
     char new_pwd[PATH_MAX] = {0};
@@ -800,4 +800,56 @@ cleanup:
     ASSERT_NCURSES_PRINT(delwin(win));
     ASSERT_NCURSES_PRINT(endwin());
     return err;
+}
+
+err_t print_usage() {
+    fprintf(stderr, "Usage: git live <command>\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Commands:\n");
+    fprintf(stderr, "  <none>       Run a new git-live dashboard.\n");
+    fprintf(stderr, "  attach       Attach a running dashboard to the current terminal so that the paths are relative to its cwd.\n");
+    fprintf(stderr, "  detach       Detach a running dashboard from the terminal it is attached to.\n");
+    return 0;
+}
+
+err_t print_attach_usage() {
+    fprintf(stderr, "Usage: git live attach <session_id>\n");
+    return 0;
+}
+
+err_t print_detach_usage() {
+    fprintf(stderr, "Usage: git live detach <session_id>\n");
+    return 0;
+}
+
+int main(int argc, char* argv[]) {
+    if (argc == 1) {
+        _main();
+    } else if (!strcmp(argv[1], "attach")) {
+        if (argc > 3) {
+            fprintf(stderr, "Too many arguments.\n");
+            print_attach_usage();
+        } else if (argc == 3 && strcmp(argv[2], "--help")) {
+            printf("attaching ..\n");
+        } else {
+            print_attach_usage();
+        }
+    } else if (!strcmp(argv[1], "detach")) {
+        if (argc > 3) {
+            fprintf(stderr, "Too many arguments.\n");
+            print_detach_usage();
+        } else if (argc == 3 && strcmp(argv[2], "--help")) {
+            printf("attaching ..\n");
+        } else {
+            print_detach_usage();
+        }
+    } else if (!strcmp(argv[1], "--help")) {
+        print_usage();
+        return 1;
+    } else {
+        fprintf(stderr, "Unknown command: %s\n", argv[1]);
+        print_usage();
+        return 1;
+    }
+    return 0;
 }
