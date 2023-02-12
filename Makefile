@@ -17,6 +17,34 @@ ifdef CHECK_BOUNDS
 CFLAGS += -D CHECK_BOUNDS
 endif
 
+define DEBIAN_CONTROL
+Package: $(NAME)
+Version: $(VERSION)
+Architecture: $(DEB_ARCH)
+Maintainer: Yanay Goor <yanay.goor@gmail.com>
+Description: A live git dashboard.
+Depends: $(shell mkdir -p debian/control; RESULT=`dpkg-shlibdeps -O $(NAME)` && echo "$${RESULT#'shlibs:Depends='}"; rm -r debian)
+endef
+export DEBIAN_CONTROL
+
+define RPM_SPEC
+Name: $(NAME)
+Version: $(VERSION)
+Release: 1%{?dist}
+Summary: A live git dashboard.
+License: GPLv3
+URL: https://github/YanayGoor/git-live
+Requires: libgit2 >=
+%description
+%build
+%install
+mkdir -p %{buildroot}/usr/bin
+%{__cp} %{_sourcedir}/$(NAME) %{buildroot}/usr/bin
+%files
+/usr/bin/$(NAME)
+endef
+export RPM_SPEC
+
 all: $(NAME)
 
 $(NAME): $(OBJ) $(STATIC_LIBS)
@@ -30,7 +58,7 @@ lib/layout/liblayout.a: lib/layout/layout.c
 
 clean:
 	rm -rf $(NAME) $(OBJ)
-	rm -rf $(DEB_PATH)
+	rm -rf build/
 	rm -rf $(DEB_PATH).deb
 	$(MAKE) -C lib/layout clean
 
@@ -45,14 +73,7 @@ deb: $(NAME)
 	cp $(NAME) $(DEB_PATH)/usr/bin/
 	mkdir -p $(DEB_PATH)/DEBIAN
 	touch $(DEB_PATH)/DEBIAN/control
-	echo "Package: $(NAME)" >> $(DEB_PATH)/DEBIAN/control
-	echo "Version: $(VERSION)" >> $(DEB_PATH)/DEBIAN/control
-	echo "Architecture: $(DEB_ARCH)" >> $(DEB_PATH)/DEBIAN/control
-	echo "Maintainer: Yanay Goor <yanay.goor@gmail.com>" >> $(DEB_PATH)/DEBIAN/control
-	echo "Description: A live git dashboard." >> $(DEB_PATH)/DEBIAN/control
-	mkdir -p debian/control
-	RESULT=`dpkg-shlibdeps -O $(NAME)` && echo "Depends: $${RESULT#'shlibs:Depends='}" >> $(DEB_PATH)/DEBIAN/control
-	rm -r debian
+	echo "$$DEBIAN_CONTROL" >> $(DEB_PATH)/DEBIAN/control
 	dpkg-deb --build --root-owner-group $(DEB_PATH)
 	mkdir -p build/
 	mv $(DEB_PATH).deb build/
@@ -61,28 +82,11 @@ deb: $(NAME)
 rpm: $(NAME)
 	rm -rf ~/rpmbuild
 	rpmdev-setuptree
-	tar --create --file $(NAME)-$(VERSION).tar.gz src/ lib/
-	mv $(NAME)-$(VERSION).tar.gz ~/rpmbuild/SOURCES
-	# rpmdev-newspec $(NAME)
-	# mv $(NAME).spec ~/rpmbuild/SPECS
-	echo "Name: $(NAME)" >> ~/rpmbuild/SPECS/$(NAME).spec
-	echo "Version: $(VERSION)" >> ~/rpmbuild/SPECS/$(NAME).spec
-	echo "Release: 1%{?dist}" >> ~/rpmbuild/SPECS/$(NAME).spec
-	echo "Summary: A live git dashboard." >> ~/rpmbuild/SPECS/$(NAME).spec
-	echo "License: GPLv3" >> ~/rpmbuild/SPECS/$(NAME).spec
-	echo "URL: https://github/YanayGoor/git-live" >> ~/rpmbuild/SPECS/$(NAME).spec
-	echo "Requires: libgit2 >= 0.26.8, ncurses >= 5.9"
-	echo "%description" >> ~/rpmbuild/SPECS/$(NAME).spec
-	echo "%build" >> ~/rpmbuild/SPECS/$(NAME).spec
-	echo "%install" >> ~/rpmbuild/SPECS/$(NAME).spec
-	echo "mkdir -p %{buildroot}/usr/bin" >> ~/rpmbuild/SPECS/$(NAME).spec
-	echo "%{__cp} %{_sourcedir}/git-live %{buildroot}/usr/bin" >> ~/rpmbuild/SPECS/$(NAME).spec
-	echo "%files" >> ~/rpmbuild/SPECS/$(NAME).spec
-	echo "/usr/bin/git-live" >> ~/rpmbuild/SPECS/$(NAME).spec
+	echo "$$RPM_SPEC" >> ~/rpmbuild/SPECS/$(NAME).spec
 	cp $(NAME) ~/rpmbuild/SOURCES
 	rpmbuild -ba  ~/rpmbuild/SPECS/$(NAME).spec
 	mkdir -p build/
-	cp ~/rpmbuild/RPMS/*/git-live* build
+	cp ~/rpmbuild/RPMS/*/$(NAME)* build
 	
 
 .PHONY: clean all
