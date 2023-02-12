@@ -343,10 +343,7 @@ err_t print_status(struct node *node, git_repository *repo) {
     opts =
         (git_status_options){.version = GIT_STATUS_OPTIONS_VERSION, .flags = 0, .show = GIT_STATUS_SHOW_WORKDIR_ONLY};
 
-    if (git_status_list_new(&status_list, repo, &opts)) {
-        printf("cannot get status list\n");
-        exit(1);
-    }
+    ASSERT(!git_status_list_new(&status_list, repo, &opts));
 
     append_text(node, " changed:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
@@ -360,10 +357,7 @@ err_t print_status(struct node *node, git_repository *repo) {
                                 .flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED,
                                 .show = GIT_STATUS_SHOW_WORKDIR_ONLY};
 
-    if (git_status_list_new(&status_list, repo, &opts)) {
-        printf("cannot get status list\n");
-        exit(1);
-    }
+    ASSERT(!git_status_list_new(&status_list, repo, &opts));
     append_text(node, " untracked:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
         const git_status_entry *entry = git_status_byindex(status_list, i);
