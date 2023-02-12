@@ -25,16 +25,16 @@ typedef int err_t;
 } while (0)
 
 #define RETHROW_PRINT(x) do { \
-  if (x) { \
-    fprintf(stderr, "rethrown from %s:%d (%d)\n", __FILE__, __LINE__, (x)); \
-    err = 1;                   \
+  err = (x);                            \
+  if (err) { \
+    fprintf(stderr, "rethrown from %s:%d (%d)\n", __FILE__, __LINE__, err); \
   } \
 } while (0)
 
 #define RETHROW(x) do { \
-  if (x) { \
-    fprintf(stderr, "rethrown from %s:%d (%d)\n", __FILE__, __LINE__, (x)); \
-    err = 1;                   \
+  err = (x);                            \
+  if (err) { \
+    fprintf(stderr, "rethrown from %s:%d (%d)\n", __FILE__, __LINE__, err); \
     goto cleanup; \
   } \
 } while (0)
