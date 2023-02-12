@@ -563,6 +563,52 @@ cleanup:
     return err;
 }
 
+err_t set_attached_terminal_hash(char *session_id, char *terminal_hash) {
+    err_t err = NO_ERROR;
+    char cache_dir[PATH_MAX] = {0};
+    char attached_file[PATH_MAX] = {0};
+    int fd = FD_INVALID;
+
+    ASSERT(session_id);
+
+    RETHROW(get_cache_dir(cache_dir, sizeof(cache_dir)));
+
+    uint32_t written = snprintf(attached_file, sizeof(attached_file), "%s/%s/%s", cache_dir, "attached", session_id);
+    ASSERT(written < sizeof(attached_file));
+    printf("%s\n", attached_file);
+
+    fd = open(attached_file, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
+    ASSERT(fd != FD_INVALID);
+
+    ssize_t res = write(fd, terminal_hash, strlen(terminal_hash) + 1);
+    ASSERT(res == (int32_t)strlen(terminal_hash) + 1);
+
+cleanup:
+    RETHROW_PRINT(safe_close_fd(&fd));
+    return err;
+}
+
+err_t clear_attached_terminal_hash(char *session_id) {
+    err_t err = NO_ERROR;
+    char cache_dir[PATH_MAX] = {0};
+    char attached_file[PATH_MAX] = {0};
+    int fd = FD_INVALID;
+
+    ASSERT(session_id);
+
+    RETHROW(get_cache_dir(cache_dir, sizeof(cache_dir)));
+
+    uint32_t written = snprintf(attached_file, sizeof(attached_file), "%s/%s/%s", cache_dir, "attached", session_id);
+    ASSERT(written < sizeof(attached_file));
+    printf("%s\n", attached_file);
+
+    ASSERT(!unlink(attached_file));
+
+cleanup:
+    RETHROW_PRINT(safe_close_fd(&fd));
+    return err;
+}
+
 err_t get_terminal_workdir_path(char *terminal_hash, char *out, uint32_t out_len) {
     err_t err = NO_ERROR;
     char cache_dir[PATH_MAX] = {0};
@@ -723,7 +769,8 @@ int _main() {
         RETHROW(try_get_attached_terminal_workdir(hex, new_pwd, sizeof(new_pwd) - 1, inotify_new_pwd_path,
                                                   sizeof(inotify_new_pwd_path) - 1));
 
-        if (inotify != -1 && memcmp(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path))) {
+        if (inotify != -1 &&
+            memcmp(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path))) {
             if (inotify_pwd_path != INOTIFY_INVALID) {
                 inotify_rm_watch(inotify, inotify_pwd_path);
             }
@@ -763,7 +810,6 @@ int _main() {
         RETHROW(append_text(title, " (session "));
         RETHROW(append_text(title, hex));
         RETHROW(append_text(title, ")"));
-
 
         RETHROW(append_child(top_header, &top_header_right));
         top_header_right->expand = 1;
@@ -807,9 +853,32 @@ err_t print_usage() {
     fprintf(stderr, "\n");
     fprintf(stderr, "Commands:\n");
     fprintf(stderr, "  <none>       Run a new git-live dashboard.\n");
-    fprintf(stderr, "  attach       Attach a running dashboard to the current terminal so that the paths are relative to its cwd.\n");
+    fprintf(stderr, "  attach       Attach a running dashboard to the current terminal so that the paths are relative "
+                    "to its cwd.\n");
     fprintf(stderr, "  detach       Detach a running dashboard from the terminal it is attached to.\n");
     return 0;
+}
+
+err_t attach_terminal_session(char *session_id) {
+    err_t err = NO_ERROR;
+    char *terminal_hash = getenv("GIT_LIVE_TTY_HASH");
+
+    ASSERT(terminal_hash);
+    ASSERT(session_id);
+
+    RETHROW(set_attached_terminal_hash(session_id, terminal_hash));
+cleanup:
+    return err;
+}
+
+err_t detach_terminal_session(char *session_id) {
+    err_t err = NO_ERROR;
+
+    ASSERT(session_id);
+
+    RETHROW(clear_attached_terminal_hash(session_id));
+cleanup:
+    return err;
 }
 
 err_t print_attach_usage() {
@@ -822,15 +891,15 @@ err_t print_detach_usage() {
     return 0;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     if (argc == 1) {
-        _main();
+        return _main();
     } else if (!strcmp(argv[1], "attach")) {
         if (argc > 3) {
             fprintf(stderr, "Too many arguments.\n");
             print_attach_usage();
         } else if (argc == 3 && strcmp(argv[2], "--help")) {
-            printf("attaching ..\n");
+            return attach_terminal_session(argv[2]);
         } else {
             print_attach_usage();
         }
@@ -839,7 +908,7 @@ int main(int argc, char* argv[]) {
             fprintf(stderr, "Too many arguments.\n");
             print_detach_usage();
         } else if (argc == 3 && strcmp(argv[2], "--help")) {
-            printf("attaching ..\n");
+            return detach_terminal_session(argv[2]);
         } else {
             print_detach_usage();
         }

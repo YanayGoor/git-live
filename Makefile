@@ -41,13 +41,9 @@ Requires: libgit2 >=
 mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}/etc/profile.d/
 %{__cp} %{_sourcedir}/$(NAME) %{buildroot}/usr/bin
-%{__cp} %{_sourcedir}/$(NAME)-attach %{buildroot}/usr/bin
-%{__cp} %{_sourcedir}/$(NAME)-detach %{buildroot}/usr/bin
 %{__cp} %{_sourcedir}/$(NAME).sh %{buildroot}/etc/profile.d
 %files
 /usr/bin/$(NAME)
-/usr/bin/$(NAME)-attach
-/usr/bin/$(NAME)-detach
 /etc/profile.d/$(NAME).sh
 endef
 export RPM_SPEC
@@ -79,8 +75,6 @@ deb: $(NAME)
 	mkdir -p $(DEB_PATH)/usr/bin
 	mkdir -p $(DEB_PATH)/etc/profile.d/
 	cp package_files/$(NAME).sh $(DEB_PATH)/etc/profile.d/
-	cp package_files/$(NAME)-attach.sh $(DEB_PATH)/usr/bin/$(NAME)-attach
-	cp package_files/$(NAME)-detach.sh $(DEB_PATH)/usr/bin/$(NAME)-detach
 	cp $(NAME) $(DEB_PATH)/usr/bin/
 	mkdir -p $(DEB_PATH)/DEBIAN
 	touch $(DEB_PATH)/DEBIAN/control
@@ -96,8 +90,6 @@ rpm: $(NAME)
 	echo "$$RPM_SPEC" >> ~/rpmbuild/SPECS/$(NAME).spec
 	cp $(NAME) ~/rpmbuild/SOURCES
 	cp package_files/$(NAME).sh ~/rpmbuild/SOURCES
-	cp package_files/$(NAME)-attach.sh ~/rpmbuild/SOURCES/$(NAME)-attach
-	cp package_files/$(NAME)-detach.sh ~/rpmbuild/SOURCES/$(NAME)-detach
 	rpmbuild -ba  ~/rpmbuild/SPECS/$(NAME).spec
 	mkdir -p build/
 	cp ~/rpmbuild/RPMS/*/$(NAME)* build
