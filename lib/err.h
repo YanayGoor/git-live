@@ -7,6 +7,12 @@ typedef int err_t;
 
 #define NO_ERROR (0)
 
+#define ABORT() do { \
+    fprintf(stderr, "runtime error: aborted at %s:%d with errno %d\n", __FILE__, __LINE__, errno); \
+    err = 1;      \
+    goto cleanup; \
+} while (0)
+
 #define ASSERT(x) do { \
   errno = 0;           \
   if (!(x)) { \
