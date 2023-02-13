@@ -37,8 +37,8 @@
 #define INOTIFY_INVALID (-1)
 #define WATCH_INVALID (-1)
 
-#define ASSERT_LIBGIT2(expr) ASSERT(expr != ERR)
-#define ASSERT_LIBGIT2_PRINT(expr) ASSERT_PRINT(expr != ERR)
+#define ASSERT_NCURSES(expr) ASSERT(expr != ERR)
+#define ASSERT_NCURSES_PRINT(expr) ASSERT_PRINT(expr != ERR)
 
 struct ref {
     char *name;
@@ -329,7 +329,7 @@ err_t print_status(struct node *node, git_repository *repo) {
     ASSERT(node);
     ASSERT(repo);
 
-    ASSERT_LIBGIT2(git_status_list_new(&status_list, repo, &opts));
+    ASSERT_NCURSES(git_status_list_new(&status_list, repo, &opts));
 
     clear_children(node);
 
@@ -464,18 +464,18 @@ int main() {
     ASSERT(!git_repository_discover(&buf, cwd, 0, NULL));
     ASSERT(!git_repository_open(&repo, buf.ptr));
 
-    ASSERT_LIBGIT2(curs_set(0));
-    ASSERT_LIBGIT2(start_color());
-    ASSERT_LIBGIT2(use_default_colors());
+    ASSERT_NCURSES(curs_set(0));
+    ASSERT_NCURSES(start_color());
+    ASSERT_NCURSES(use_default_colors());
 
-    ASSERT_LIBGIT2(init_pair(COLOR_STAGED, COLOR_GREEN, -1));
-    ASSERT_LIBGIT2(init_pair(COLOR_NOT_STAGED, COLOR_RED, -1));
-    ASSERT_LIBGIT2(init_pair(COLOR_UNTRACKED, COLOR_RED, -1));
-    ASSERT_LIBGIT2(init_pair(COLOR_TITLE, COLOR_BLACK, COLOR_WHITE));
-    ASSERT_LIBGIT2(init_pair(COLOR_COMMIT_HASH, COLOR_BLUE, -1));
-    ASSERT_LIBGIT2(init_pair(COLOR_COMMIT_TITLE, -1, -1));
-    ASSERT_LIBGIT2(init_pair(COLOR_COMMIT_DATE, -1, -1));
-    ASSERT_LIBGIT2(init_pair(COLOR_COMMIT_USER, -1, -1));
+    ASSERT_NCURSES(init_pair(COLOR_STAGED, COLOR_GREEN, -1));
+    ASSERT_NCURSES(init_pair(COLOR_NOT_STAGED, COLOR_RED, -1));
+    ASSERT_NCURSES(init_pair(COLOR_UNTRACKED, COLOR_RED, -1));
+    ASSERT_NCURSES(init_pair(COLOR_TITLE, COLOR_BLACK, COLOR_WHITE));
+    ASSERT_NCURSES(init_pair(COLOR_COMMIT_HASH, COLOR_BLUE, -1));
+    ASSERT_NCURSES(init_pair(COLOR_COMMIT_TITLE, -1, -1));
+    ASSERT_NCURSES(init_pair(COLOR_COMMIT_DATE, -1, -1));
+    ASSERT_NCURSES(init_pair(COLOR_COMMIT_USER, -1, -1));
 
     RETHROW(init_ncurses_layout(&layout, win));
     layout->root.expand = 1;
@@ -586,7 +586,7 @@ cleanup:
     git_repository_free(repo);
     RETHROW_PRINT(clear_refs(&refs));
     RETHROW_PRINT(free_layout(layout));
-    ASSERT_LIBGIT2_PRINT(delwin(win));
-    ASSERT_LIBGIT2_PRINT(endwin());
+    ASSERT_NCURSES_PRINT(delwin(win));
+    ASSERT_NCURSES_PRINT(endwin());
     return err;
 }
