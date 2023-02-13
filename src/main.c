@@ -40,6 +40,8 @@
 #define ASSERT_NCURSES(expr) ASSERT(expr != ERR)
 #define ASSERT_NCURSES_PRINT(expr) ASSERT_PRINT(expr != ERR)
 
+#define GIT_RETRY_COUNT (10)
+
 struct ref {
     char *name;
     size_t index;
@@ -318,6 +320,25 @@ void print_status_entry(const git_status_entry *entry, char *buff, size_t len) {
     }
 }
 
+err_t safe_git_status_list_new(git_status_list** status_list, git_repository* repo, git_status_options* opts) {
+    err_t err = NO_ERROR;
+    uint32_t retries = 0;
+    int inner_err = 0;
+
+    ASSERT(status_list);
+    ASSERT(repo);
+    ASSERT(opts);
+
+    while (retries++ < GIT_RETRY_COUNT) {
+        inner_err = git_status_list_new(status_list, repo, opts);
+        if (!inner_err) goto cleanup;
+    }
+    ABORT();
+
+cleanup:
+    return err;
+}
+
 err_t print_status(struct node *node, git_repository *repo) {
     err_t err = NO_ERROR;
     char buff[200] = {0};
@@ -329,7 +350,7 @@ err_t print_status(struct node *node, git_repository *repo) {
     ASSERT(node);
     ASSERT(repo);
 
-    ASSERT_NCURSES(git_status_list_new(&status_list, repo, &opts));
+    RETHROW(safe_git_status_list_new(&status_list, repo, &opts));
 
     clear_children(node);
 
@@ -343,10 +364,7 @@ err_t print_status(struct node *node, git_repository *repo) {
     opts =
         (git_status_options){.version = GIT_STATUS_OPTIONS_VERSION, .flags = 0, .show = GIT_STATUS_SHOW_WORKDIR_ONLY};
 
-    if (git_status_list_new(&status_list, repo, &opts)) {
-        printf("cannot get status list\n");
-        exit(1);
-    }
+    RETHROW(safe_git_status_list_new(&status_list, repo, &opts));
 
     append_text(node, " changed:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
@@ -360,10 +378,7 @@ err_t print_status(struct node *node, git_repository *repo) {
                                 .flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED,
                                 .show = GIT_STATUS_SHOW_WORKDIR_ONLY};
 
-    if (git_status_list_new(&status_list, repo, &opts)) {
-        printf("cannot get status list\n");
-        exit(1);
-    }
+    RETHROW(safe_git_status_list_new(&status_list, repo, &opts));
     append_text(node, " untracked:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
         const git_status_entry *entry = git_status_byindex(status_list, i);
