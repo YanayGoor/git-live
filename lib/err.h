@@ -1,6 +1,7 @@
 #ifndef GIT_LIVE_ERR_H
 #define GIT_LIVE_ERR_H
 
+#include <stdio.h>
 #include "errno.h"
 
 typedef int err_t;

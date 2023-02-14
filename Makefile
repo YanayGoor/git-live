@@ -8,6 +8,7 @@ LD = ld
 CFLAGS := -Wall -Wextra -Werror -g -std=c11 -D_BSD_SOURCE -D_DEFAULT_SOURCE
 
 SRC += src/main.c
+SRC += src/utils.c
 SRC += src/ncurses_layout.c
 OBJ = $(patsubst %.c,%.o,$(SRC))
 

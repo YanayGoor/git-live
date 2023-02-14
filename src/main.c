@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "../lib/err.h"
+#include "utils.h"
 #include "../lib/layout/layout.h"
 #include "ncurses_layout.h"
 #include <curses.h>
@@ -16,13 +17,11 @@
 #include <sys/inotify.h>
 #include <sys/queue.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #define REFLOG_CO_PREFIX "checkout:"
 
 #define CHECKOUT_MAX_LEN 100
-
-#define MAX(x, y) (((x) > (y)) ? (x) : (y))
-#define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 #define COLOR_UNTRACKED 33
 #define COLOR_NOT_STAGED 34
@@ -33,8 +32,6 @@
 #define COLOR_COMMIT_TITLE 38
 #define COLOR_COMMIT_DATE 39
 #define COLOR_COMMIT_USER 40
-
-#define MSEC_TO_USEC (1000)
 
 #define INOTIFY_INVALID (-1)
 #define WATCH_INVALID (-1)
@@ -54,35 +51,6 @@ struct ref {
 LIST_HEAD(refs, ref);
 
 static volatile bool keep_running = TRUE;
-
-err_t safe_close_fd(int *fd) {
-    err_t err = NO_ERROR;
-
-    ASSERT(fd);
-
-    if (*fd != FD_INVALID) {
-        close(*fd);
-        *fd = FD_INVALID;
-    }
-
-cleanup:
-    return err;
-}
-
-void get_human_readable_time(git_time_t t, char *buff, size_t len) {
-    int64_t diff = time(NULL) - t;
-    if (diff < 60) {
-        snprintf(buff, len, "now");
-    } else if (diff < 60 * 60) {
-        snprintf(buff, len, "%ld minutes ago", diff / 60);
-    } else if (diff < 60 * 60 * 24) {
-        snprintf(buff, len, "%ld hours ago", diff / 60 / 60);
-    } else if (diff < 60 * 60 * 24 * 7) {
-        snprintf(buff, len, "%ld days ago", diff / 60 / 60 / 24);
-    } else {
-        snprintf(buff, len, "%ld weeks ago", diff / 60 / 60 / 24 / 7);
-    }
-}
 
 bool is_checkout_reflog(const git_reflog_entry *entry) {
     const char *message = git_reflog_entry_message(entry);
@@ -280,7 +248,7 @@ err_t print_latest_commits(struct node *node, git_repository *repo, int max) {
 
         append_styled_text(user_col, git_commit_committer(commit)->name, COLOR_COMMIT_USER, WA_DIM);
 
-        get_human_readable_time(git_commit_time(commit), time, 15);
+        RETHROW(get_human_readable_time(git_commit_time(commit), time, 15));
         append_styled_text(time_col, time, COLOR_COMMIT_DATE, 0);
 
         git_commit_free(commit);
@@ -303,49 +271,6 @@ err_t get_head_name(git_repository *repo, char *buff, size_t len) {
 
     strncpy(buff, git_reference_shorthand(head), len);
     git_reference_free(head);
-
-cleanup:
-    return err;
-}
-
-char *str_find_right(char *buff, unsigned long maxlen, char sep) {
-    char *curr = buff + MIN(strlen(buff), maxlen);
-    while (curr >= buff) {
-        if (*curr == sep) {
-            return curr;
-        }
-        curr--;
-    }
-    return NULL;
-}
-
-err_t relative_to(char *curr_pwd, const char *rel_path, char *new_pwd, char *out_buff, unsigned long out_len) {
-    err_t err = NO_ERROR;
-    char fullpath[PATH_MAX] = {0};
-    snprintf(fullpath, sizeof(fullpath) - 1, "%s/%s", curr_pwd, rel_path);
-
-    // TODO: this is not a generic behaviour expected of relative_to, rename the function or add an arg,
-    if (!strncmp(curr_pwd, new_pwd, strlen(new_pwd))) {
-        // pwds are either the smae of new_pwd is higher than curr_pwd
-        strncpy(out_buff, rel_path, out_len);
-        goto cleanup;
-    }
-
-    int count = 0;
-    unsigned long len = strlen(new_pwd);
-    while (count < 20) {
-        if (!strncmp(fullpath, new_pwd, len - 1)) {
-            break;
-        }
-        count++;
-        len = str_find_right(new_pwd, len - 1, '/') - new_pwd;
-    }
-    for (int i = 0; i < count; i++) {
-        strncpy(out_buff, "../", MIN(out_len, 3));
-        out_buff += MIN(out_len, 3);
-        out_len -= MIN(out_len, 3);
-    }
-    strncpy(out_buff, fullpath + len + 1, out_len);
 
 cleanup:
     return err;
@@ -511,17 +436,6 @@ cleanup:
     return err;
 }
 
-err_t wait_for_ms(int timeout) {
-    err_t err = NO_ERROR;
-
-    ASSERT(timeout < 1000000);
-
-    usleep(timeout * MSEC_TO_USEC);
-
-cleanup:
-    return err;
-}
-
 err_t get_cache_dir(char *buff, uint32_t maxlen) {
     err_t err = NO_ERROR;
 
@@ -566,16 +480,24 @@ cleanup:
 err_t set_attached_terminal_hash(char *session_id, char *terminal_hash) {
     err_t err = NO_ERROR;
     char cache_dir[PATH_MAX] = {0};
+    char attached_dir[PATH_MAX] = {0};
     char attached_file[PATH_MAX] = {0};
+    struct stat st = {0};
     int fd = FD_INVALID;
 
     ASSERT(session_id);
 
     RETHROW(get_cache_dir(cache_dir, sizeof(cache_dir)));
 
-    uint32_t written = snprintf(attached_file, sizeof(attached_file), "%s/%s/%s", cache_dir, "attached", session_id);
+    uint32_t written = snprintf(attached_dir, sizeof(attached_dir), "%s/%s", cache_dir, "attached");
+    ASSERT(written < sizeof(attached_dir));
+
+    if (stat(attached_dir, &st) == -1) {
+        mkdir(attached_dir, S_IXUSR | S_IWUSR | S_IRUSR);
+    }
+
+    written = snprintf(attached_file, sizeof(attached_file), "%s/%s", attached_dir, session_id);
     ASSERT(written < sizeof(attached_file));
-    printf("%s\n", attached_file);
 
     fd = open(attached_file, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
     ASSERT(fd != FD_INVALID);
@@ -600,7 +522,6 @@ err_t clear_attached_terminal_hash(char *session_id) {
 
     uint32_t written = snprintf(attached_file, sizeof(attached_file), "%s/%s/%s", cache_dir, "attached", session_id);
     ASSERT(written < sizeof(attached_file));
-    printf("%s\n", attached_file);
 
     ASSERT(!unlink(attached_file));
 
@@ -861,7 +782,7 @@ err_t print_usage() {
 
 err_t attach_terminal_session(char *session_id) {
     err_t err = NO_ERROR;
-    char *terminal_hash = getenv("GIT_LIVE_TTY_HASH");
+    char *terminal_hash = getenv("GIT_LIVE_TERMINAL_ID");
 
     ASSERT(terminal_hash);
     ASSERT(session_id);
