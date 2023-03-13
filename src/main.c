@@ -816,20 +816,20 @@ int main(int argc, char *argv[]) {
     if (argc == 1) {
         return _main();
     } else if (!strcmp(argv[1], "attach")) {
-        if (argc > 3) {
+        if (argc == 3 && strcmp(argv[2], "--help")) {
+            return attach_terminal_session(argv[2]);
+        } else if (argc > 3) {
             fprintf(stderr, "Too many arguments.\n");
             print_attach_usage();
-        } else if (argc == 3 && strcmp(argv[2], "--help")) {
-            return attach_terminal_session(argv[2]);
         } else {
             print_attach_usage();
         }
     } else if (!strcmp(argv[1], "detach")) {
-        if (argc > 3) {
+        if (argc == 3 && strcmp(argv[2], "--help")) {
+            return detach_terminal_session(argv[2]);
+        } else if (argc > 3) {
             fprintf(stderr, "Too many arguments.\n");
             print_detach_usage();
-        } else if (argc == 3 && strcmp(argv[2], "--help")) {
-            return detach_terminal_session(argv[2]);
         } else {
             print_detach_usage();
         }
