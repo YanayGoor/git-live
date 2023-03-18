@@ -566,7 +566,7 @@ cleanup:
 err_t try_get_attached_terminal_workdir(char *session_id, char *out, uint32_t out_len, char *inotify_watch_path,
                                         uint32_t inotify_watch_path_len) {
     err_t err = NO_ERROR;
-    char terminal_hash[9] = {0};
+    char terminal_hash[17] = {0};
     char terminal_workdir_path[PATH_MAX] = {0};
 
     RETHROW(get_attached_terminal_hash(session_id, terminal_hash, sizeof(terminal_hash) - 1));
