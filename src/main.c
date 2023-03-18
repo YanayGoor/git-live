@@ -450,7 +450,7 @@ cleanup:
     return err;
 }
 
-err_t get_attached_terminal_hash(char *session_id, char *out, uint32_t out_len) {
+err_t get_attached_terminal_hash(char *session_id, char *out, uint32_t out_len, bool* successful) {
     err_t err = NO_ERROR;
     char cache_dir[PATH_MAX] = {0};
     char attached_file[PATH_MAX] = {0};
@@ -458,19 +458,28 @@ err_t get_attached_terminal_hash(char *session_id, char *out, uint32_t out_len) 
 
     ASSERT(session_id);
     ASSERT(out);
+    ASSERT(successful);
 
     RETHROW(get_cache_dir(cache_dir, sizeof(cache_dir)));
+
+    *successful = false;
 
     uint32_t written = snprintf(attached_file, sizeof(attached_file), "%s/%s/%s", cache_dir, "attached", session_id);
     ASSERT(written < sizeof(attached_file));
 
     fd = open(attached_file, O_RDONLY);
-    if (fd == FD_INVALID)
+    if (fd == FD_INVALID) {
+        *successful = false;
         goto cleanup;
+    }
 
     ssize_t res = read(fd, out, out_len);
-    if (res <= 0)
+    if (res <= 0) {
+        *successful = false;
         goto cleanup;
+    }
+
+    *successful = true;
 
 cleanup:
     RETHROW_PRINT(safe_close_fd(&fd));
@@ -564,12 +573,16 @@ cleanup:
 }
 
 err_t try_get_attached_terminal_workdir(char *session_id, char *out, uint32_t out_len, char *inotify_watch_path,
-                                        uint32_t inotify_watch_path_len) {
+                                        uint32_t inotify_watch_path_len, bool* successful) {
     err_t err = NO_ERROR;
     char terminal_hash[17] = {0};
     char terminal_workdir_path[PATH_MAX] = {0};
 
-    RETHROW(get_attached_terminal_hash(session_id, terminal_hash, sizeof(terminal_hash) - 1));
+    RETHROW(get_attached_terminal_hash(session_id, terminal_hash, sizeof(terminal_hash) - 1, successful));
+    if (!*successful) {
+        goto cleanup;
+    }
+
     RETHROW(get_terminal_workdir_path(terminal_hash, terminal_workdir_path, sizeof(terminal_workdir_path) - 1));
     RETHROW(get_terminal_workdir(terminal_workdir_path, out, out_len));
 
@@ -614,6 +627,7 @@ int _main() {
     git_repository *repo = NULL;
     int inotify = INOTIFY_INVALID;
     int inotify_pwd_path = INOTIFY_INVALID;
+    bool is_attached = false;
 
     signal(SIGINT, interrupt_handler);
 
@@ -687,8 +701,8 @@ int _main() {
         }
 
         memcpy(new_pwd, cwd, sizeof(new_pwd) - 1);
-        RETHROW(try_get_attached_terminal_workdir(hex, new_pwd, sizeof(new_pwd) - 1, inotify_new_pwd_path,
-                                                  sizeof(inotify_new_pwd_path) - 1));
+        try_get_attached_terminal_workdir(hex, new_pwd, sizeof(new_pwd) - 1, inotify_new_pwd_path,
+                                                  sizeof(inotify_new_pwd_path) - 1, &is_attached);
 
         if (inotify != -1 &&
             memcmp(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path))) {
@@ -730,6 +744,9 @@ int _main() {
         RETHROW(append_text(title, "Git Live"));
         RETHROW(append_text(title, " (session "));
         RETHROW(append_text(title, hex));
+        if (is_attached) {
+            RETHROW(append_text(title, " <attached>"));
+        }
         RETHROW(append_text(title, ")"));
 
         RETHROW(append_child(top_header, &top_header_right));
