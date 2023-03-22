@@ -52,7 +52,7 @@ export RPM_SPEC
 all: $(NAME)
 
 $(NAME): $(OBJ) $(STATIC_LIBS)
-	$(CC) -o $@ $^ -lc -lgit2 -lncursesw -ltinfo
+	$(CC) -o $@ $^ -lc -lgit2 -lncurses -ltinfo
 
 lib/layout/liblayout.a: lib/layout/layout.c
 	$(MAKE) -C lib/layout liblayout.a
