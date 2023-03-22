@@ -738,7 +738,7 @@ int run_dashboard() {
         try_get_attached_terminal_workdir(session_id, new_pwd, sizeof(new_pwd) - 1, inotify_new_pwd_path,
                                           sizeof(inotify_new_pwd_path) - 1, &is_attached);
 
-        if (inotify != -1 &&
+        if (inotify != FD_INVALID &&
             memcmp(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path))) {
             if (inotify_pwd_path != INOTIFY_INVALID) {
                 inotify_rm_watch(inotify, inotify_pwd_path);
