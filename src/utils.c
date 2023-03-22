@@ -98,7 +98,9 @@ err_t join_paths(const char *a, const char *b, char *out_buff, unsigned long out
     ASSERT(b);
     ASSERT(out_buff);
 
-    snprintf(out_buff, out_len, "%s/%s", a, b);
+    char* sep = a[strlen(a) - 1] == '/' ? "" : "/";
+
+    snprintf(out_buff, out_len, "%s%s%s", a, sep, b);
 
 cleanup:
     return err;

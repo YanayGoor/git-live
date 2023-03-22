@@ -300,7 +300,7 @@ cleanup:
     return err;
 }
 
-void print_status_entry(char *git_dir, char *attached_dir, const git_status_entry *entry, char *buff, size_t len) {
+void print_status_entry(const char *git_dir, const char *attached_dir, const git_status_entry *entry, char *buff, size_t len) {
     const char *status = "";
     if (entry->status & (GIT_STATUS_INDEX_NEW | GIT_STATUS_WT_NEW)) {
         status = "new";
@@ -358,7 +358,7 @@ cleanup:
     return err;
 }
 
-err_t print_status(char *pwd, char *new_pwd, struct node *node, git_repository *repo) {
+err_t print_status(const char *pwd, const char *new_pwd, struct node *node, git_repository *repo) {
     err_t err = NO_ERROR;
     char buff[PATH_MAX] = {0};
     git_status_list *status_list;
@@ -658,8 +658,8 @@ int _main() {
     ASSERT(getcwd(cwd, PATH_MAX));
     ASSERT(getcwd(new_pwd, PATH_MAX));
     ASSERT(git_libgit2_init() > 0);
-    ASSERT(!git_repository_discover(&buf, cwd, 0, NULL));
-    ASSERT(!git_repository_open(&repo, cwd));
+    ASSERT(!git_repository_discover(&buf, cwd, 0, "/"));
+    ASSERT(!git_repository_open(&repo, buf.ptr));
 
     RETHROW(gen_session_id(hex, sizeof(hex)));
 
@@ -742,7 +742,7 @@ int _main() {
         struct node *branch = NULL;
         struct node *padding = NULL;
 
-        RETHROW(print_status(cwd, new_pwd, top, repo));
+        RETHROW(print_status(git_repository_workdir(repo), new_pwd, top, repo));
 
         RETHROW(get_latest_refs(&refs, repo, getmaxy(win) - 2)); // we get more and some will be hidden
         RETHROW(print_refs(middle, &refs));
@@ -754,7 +754,7 @@ int _main() {
         RETHROW(clear_children(middle_header));
         RETHROW(clear_children(bottom_header));
 
-        RETHROW(get_head_name(repo, head_name, 100));
+        RETHROW(get_head_name(repo, head_name, sizeof(head_name)));
 
         RETHROW(append_child(top_header, &top_header_left));
         top_header_left->expand = 1;
@@ -789,7 +789,7 @@ int _main() {
         RETHROW(append_child(top_header_right, &padding));
         padding->expand = 1;
 
-        RETHROW(append_text(top_header_right, cwd));
+        RETHROW(append_text(top_header_right, git_repository_workdir(repo)));
 
         RETHROW(append_text(middle_header, "Latest Branches"));
         RETHROW(append_text(bottom_header, "Commits"));
