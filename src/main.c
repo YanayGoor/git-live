@@ -640,7 +640,7 @@ cleanup:
 
 void interrupt_handler() { keep_running = 0; }
 
-int _main() {
+int run_dashboard() {
     err_t err = NO_ERROR;
     char cwd[PATH_MAX] = {0};
     char new_pwd[PATH_MAX] = {0};
@@ -865,7 +865,7 @@ err_t print_detach_usage() {
 
 int main(int argc, char *argv[]) {
     if (argc == 1) {
-        return _main();
+        return run_dashboard();
     } else if (!strcmp(argv[1], "attach")) {
         if (argc == 3 && strcmp(argv[2], "--help")) {
             return attach_terminal_session(argv[2]);
