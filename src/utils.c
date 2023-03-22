@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <linux/limits.h>
 #include <time.h>
+#include <stdbool.h>
+#include <curses.h>
 #include "../lib/err.h"
 #include "utils.h"
 
@@ -62,65 +64,98 @@ err_t safe_close_fd(int *fd) {
     return err;
 }
 
-err_t str_find_right(char *buff, unsigned long maxlen, char sep, char** out) {
-    err_t err = NO_ERROR;
-    char *curr = NULL;
-
-    ASSERT(buff);
-    ASSERT(out);
-
-    *out = NULL;
-
-    curr = buff + strnlen(buff, maxlen);
-    while (curr >= buff) {
-        if (*curr == sep) {
-            *out = curr;
+static size_t get_path_part_size(const char* path) {
+    for (size_t i = 0; i < strlen(path); i++) {
+        if (path[i] == '/') {
+            return i;
         }
-        curr--;
+    }
+    return strlen(path);
+}
+
+static bool is_path_part_eq(const char* a, const char* b) {
+    size_t a_part_sz = get_path_part_size(a);
+    size_t b_part_sz = get_path_part_size(b);
+    if (a_part_sz != b_part_sz) {
+        return false;
+    }
+    for (size_t i = 0; i < MIN(a_part_sz, b_part_sz); i++) {
+        if (a[i] != b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void advance_to_next_part(const char** str) {
+   *str += MIN(strlen(*str), get_path_part_size(*str) + 1);
+}
+
+err_t join_paths(const char *a, const char *b, char *out_buff, unsigned long out_len) {
+    err_t err = NO_ERROR;
+
+    ASSERT(a);
+    ASSERT(b);
+    ASSERT(out_buff);
+
+    snprintf(out_buff, out_len, "%s/%s", a, b);
+
+cleanup:
+    return err;
+}
+
+err_t relative_to(const char* path, const char *dir, char *out_buff, unsigned long out_len) {
+    err_t err = NO_ERROR;
+
+    ASSERT(path);
+    ASSERT(dir);
+    ASSERT(out_buff);
+
+    // consume all common path
+    while (strlen(dir) > 0 && is_path_part_eq(path, dir)) {
+        advance_to_next_part(&path);
+        advance_to_next_part(&dir);
+    }
+
+    // count the parts left in the dir and add as ../
+    while (strlen(dir) > 0) {
+        advance_to_next_part(&dir);
+
+        strncpy(out_buff, "../", MIN(out_len, strlen("../")));
+        out_buff += MIN(out_len, strlen("../"));
+        out_len -= MIN(out_len, strlen("../"));
+    }
+
+    if (strlen(path) == 0) {
+        strncpy(out_buff, ".", out_len);
+    } else {
+        strncpy(out_buff, path, out_len);
     }
 
 cleanup:
     return err;
 }
 
-err_t relative_to(char *curr_pwd, const char *rel_path, char *new_pwd, char *out_buff, unsigned long out_len) {
+err_t is_relative_to(const char* path, const char* parent, bool* out) {
     err_t err = NO_ERROR;
-    char fullpath[PATH_MAX] = {0};
-    snprintf(fullpath, sizeof(fullpath) - 1, "%s/%s", curr_pwd, rel_path);
 
-    // TODO: this is not a generic behaviour expected of relative_to, rename the function or add an arg,
-    if (!strncmp(curr_pwd, new_pwd, strlen(new_pwd))) {
-        // pwds are either the smae of new_pwd is higher than curr_pwd
-        strncpy(out_buff, rel_path, out_len);
-        goto cleanup;
-    }
+    ASSERT(path);
+    ASSERT(parent);
+    ASSERT(out);
 
-    int count = 0;
-    unsigned long len = strlen(new_pwd);
-    char *parent_dir_end = NULL;
-    while (len > 0) {
-        if (!strncmp(fullpath, new_pwd, len - 1)) {
-            break;
+    *out = FALSE;
+
+    while (strlen(parent) > 0) {
+        if (!is_path_part_eq(path, parent)) {
+            *out = FALSE;
+            goto cleanup;
         }
-        count++;
-        RETHROW(str_find_right(new_pwd, len - 1, '/', &parent_dir_end));
-        ASSERT(parent_dir_end);
-        len = parent_dir_end - new_pwd;
-    }
-    for (int i = 0; i < count; i++) {
-        strncpy(out_buff, "../", MIN(out_len, strlen("../")));
-        out_buff += MIN(out_len, strlen("../"));
-        out_len -= MIN(out_len, strlen("../"));
+        advance_to_next_part(&parent);
+        advance_to_next_part(&path);
     }
 
-    if (len == 0) {
-        strncpy(out_buff, ".", out_len);
-    } else {
-        strncpy(out_buff, fullpath + len + 1, out_len);
-    }
+    *out = TRUE;
 
-    cleanup:
+cleanup:
     return err;
 }
-
-

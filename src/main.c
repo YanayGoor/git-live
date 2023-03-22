@@ -276,7 +276,31 @@ cleanup:
     return err;
 }
 
-void print_status_entry(char *pwd, char *new_pwd, const git_status_entry *entry, char *buff, size_t len) {
+static err_t format_path(const char* path, const char* git_dir, const char *attached_dir, char *out_buff, unsigned long out_len) {
+    err_t err = NO_ERROR;
+    bool is_relative = FALSE;
+    char abs_path[PATH_MAX] = {0};
+
+    ASSERT(path);
+    ASSERT(git_dir);
+    ASSERT(attached_dir);
+    ASSERT(out_buff);
+    ASSERT(out_len > 1);
+
+    RETHROW(is_relative_to(git_dir, attached_dir, &is_relative));
+    if (is_relative) {
+        strncpy(out_buff, path, out_len);
+        goto cleanup;
+    }
+
+    RETHROW(join_paths(git_dir, path, abs_path, sizeof(abs_path)));
+    RETHROW(relative_to(abs_path, attached_dir, out_buff, out_len));
+
+cleanup:
+    return err;
+}
+
+void print_status_entry(char *git_dir, char *attached_dir, const git_status_entry *entry, char *buff, size_t len) {
     const char *status = "";
     if (entry->status & (GIT_STATUS_INDEX_NEW | GIT_STATUS_WT_NEW)) {
         status = "new";
@@ -291,12 +315,12 @@ void print_status_entry(char *pwd, char *new_pwd, const git_status_entry *entry,
         if (strcmp(entry->head_to_index->new_file.path, entry->head_to_index->old_file.path) != 0) {
             char old_filename[PATH_MAX] = {0};
             char new_filename[PATH_MAX] = {0};
-            relative_to(pwd, entry->head_to_index->old_file.path, new_pwd, old_filename, sizeof(old_filename) - 1);
-            relative_to(pwd, entry->head_to_index->new_file.path, new_pwd, new_filename, sizeof(new_filename) - 1);
+            format_path(entry->head_to_index->old_file.path, git_dir, attached_dir, old_filename, sizeof(old_filename) - 1);
+            format_path(entry->head_to_index->new_file.path, git_dir, attached_dir, new_filename, sizeof(new_filename) - 1);
             snprintf(buff, len, "   %s: %s->%s", status, old_filename, new_filename);
         } else {
             char filename[PATH_MAX] = {0};
-            relative_to(pwd, entry->head_to_index->new_file.path, new_pwd, filename, sizeof(filename) - 1);
+            format_path(entry->head_to_index->new_file.path, git_dir, attached_dir, filename, sizeof(filename) - 1);
             snprintf(buff, len, "   %s: %s", status, filename);
         }
     }
@@ -304,12 +328,12 @@ void print_status_entry(char *pwd, char *new_pwd, const git_status_entry *entry,
         if (strcmp(entry->index_to_workdir->new_file.path, entry->index_to_workdir->old_file.path) != 0) {
             char old_filename[PATH_MAX] = {0};
             char new_filename[PATH_MAX] = {0};
-            relative_to(pwd, entry->index_to_workdir->old_file.path, new_pwd, old_filename, sizeof(old_filename) - 1);
-            relative_to(pwd, entry->index_to_workdir->new_file.path, new_pwd, new_filename, sizeof(new_filename) - 1);
+            format_path(entry->index_to_workdir->old_file.path, git_dir, attached_dir, old_filename, sizeof(old_filename) - 1);
+            format_path(entry->index_to_workdir->new_file.path, git_dir, attached_dir, new_filename, sizeof(new_filename) - 1);
             snprintf(buff, len, "   %s: %s->%s", status, old_filename, new_filename);
         } else {
             char filename[PATH_MAX] = {0};
-            relative_to(pwd, entry->index_to_workdir->new_file.path, new_pwd, filename, sizeof(filename) - 1);
+            format_path(entry->index_to_workdir->new_file.path, git_dir, attached_dir, filename, sizeof(filename) - 1);
             snprintf(buff, len, "   %s: %s", status, filename);
         }
     }
@@ -597,8 +621,7 @@ err_t gen_session_id(char *out, uint32_t out_len) {
 
     ASSERT(out);
 
-    srand(time(NULL));
-    snprintf(out, out_len, "%02x", rand());
+    snprintf(out, out_len, "1111");
 
 cleanup:
     return err;
