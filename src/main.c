@@ -423,7 +423,31 @@ cleanup:
     return err;
 }
 
-err_t try_initialize_inotify(char *path, int *out) {
+err_t get_root_repo_path(const char *path, uint32_t path_len, char *out, uint32_t out_len) {
+    err_t err = NO_ERROR;
+    bool found = FALSE;
+
+    ASSERT(path);
+    ASSERT(out);
+
+    for (uint32_t i = 0; i < path_len; i++) {
+        if (!strncmp(path + i, "/.git/modules/", MIN(path_len - i, strlen("/.git/modules/")))) {
+            memcpy(out, path, MIN(out_len, i));
+            out[i] = '\0';
+            found = TRUE;
+            break;
+        }
+    }
+
+    if (!found) {
+        memcpy(out, path, MIN(out_len, path_len));
+    }
+
+cleanup:
+    return err;
+}
+
+err_t try_initialize_inotify(const char *path, int *out) {
     err_t err = NO_ERROR;
 
     ASSERT(path);
@@ -646,9 +670,9 @@ int run_dashboard() {
     char new_pwd[PATH_MAX] = {0};
     char prev_inotify_new_pwd_path[PATH_MAX] = {0};
     char inotify_new_pwd_path[PATH_MAX] = {0};
+    char repo_root[PATH_MAX] = {0};
     char head_name[100] = {0};
     char session_id[SESSION_ID_LEN + 1] = {0};
-    git_buf buf = {NULL, 0, 0};
     struct refs refs = LIST_HEAD_INITIALIZER();
     struct layout *layout = NULL;
     struct node *top_header = NULL;
@@ -668,10 +692,11 @@ int run_dashboard() {
     ASSERT(getcwd(cwd, PATH_MAX));
     ASSERT(getcwd(new_pwd, PATH_MAX));
     ASSERT(git_libgit2_init() > 0);
-    ASSERT(!git_repository_discover(&buf, cwd, 0, "/"));
-    ASSERT(!git_repository_open(&repo, buf.ptr));
+    ASSERT(!git_repository_open_ext(&repo, cwd, 0, "/"));
 
     RETHROW(gen_session_id(session_id, sizeof(session_id)));
+
+    RETHROW(get_root_repo_path(git_repository_path(repo), strlen(git_repository_path(repo)), repo_root, PATH_MAX));
 
     ASSERT(win = initscr());
     ASSERT_NCURSES(curs_set(0));
@@ -725,7 +750,7 @@ int run_dashboard() {
     bottom->nodes_direction = nodes_direction_columns;
     bottom->padding_left = 1;
 
-    RETHROW(try_initialize_inotify(buf.ptr, &inotify));
+    RETHROW(try_initialize_inotify(git_repository_workdir(repo), &inotify));
 
     while (keep_running) {
         if (inotify == INOTIFY_INVALID) {
@@ -737,6 +762,18 @@ int run_dashboard() {
         memcpy(new_pwd, cwd, sizeof(new_pwd) - 1);
         try_get_attached_terminal_workdir(session_id, new_pwd, sizeof(new_pwd) - 1, inotify_new_pwd_path,
                                           sizeof(inotify_new_pwd_path) - 1, &is_attached);
+
+        if(strncmp(cwd, new_pwd, sizeof(cwd))) {
+            bool is_relative = FALSE;
+            RETHROW(is_relative_to(new_pwd, repo_root, &is_relative));
+            if (is_relative) {
+                git_repository *tmp_repo = NULL;
+                ASSERT(!git_repository_open_ext(&tmp_repo, new_pwd, 0, "/"));
+                git_repository_free(repo);
+                repo = tmp_repo;
+            }
+        }
+        memcpy(cwd, new_pwd, sizeof(new_pwd) - 1);
 
         if (inotify != FD_INVALID &&
             memcmp(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path))) {
@@ -811,7 +848,6 @@ int run_dashboard() {
     }
 
 cleanup:
-    git_buf_free(&buf);
     git_repository_free(repo);
     RETHROW_PRINT(clear_refs(&refs));
     RETHROW_PRINT(free_layout(layout));
