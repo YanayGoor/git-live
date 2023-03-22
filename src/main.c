@@ -665,7 +665,6 @@ int run_dashboard() {
 
     signal(SIGINT, interrupt_handler);
 
-    ASSERT(win = initscr());
     ASSERT(getcwd(cwd, PATH_MAX));
     ASSERT(getcwd(new_pwd, PATH_MAX));
     ASSERT(git_libgit2_init() > 0);
@@ -674,6 +673,7 @@ int run_dashboard() {
 
     RETHROW(gen_session_id(session_id, sizeof(session_id)));
 
+    ASSERT(win = initscr());
     ASSERT_NCURSES(curs_set(0));
     ASSERT_NCURSES(start_color());
     ASSERT_NCURSES(use_default_colors());
