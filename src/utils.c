@@ -1,18 +1,17 @@
-#include <unistd.h>
-#include <string.h>
-#include <stdint.h>
-#include <linux/limits.h>
-#include <time.h>
-#include <stdbool.h>
-#include <curses.h>
-#include "../lib/err.h"
 #include "utils.h"
+#include "../lib/err.h"
+#include <curses.h>
+#include <linux/limits.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #define FD_INVALID (-1)
 
 #define MSEC_TO_USEC (1000)
 #define MSEC_IN_SEC (1000000)
-
 
 err_t get_human_readable_time(int64_t t, char *buff, size_t len) {
     err_t err = NO_ERROR;
@@ -36,7 +35,6 @@ cleanup:
     return err;
 }
 
-
 err_t wait_for_ms(int timeout) {
     err_t err = NO_ERROR;
 
@@ -44,11 +42,9 @@ err_t wait_for_ms(int timeout) {
 
     usleep(timeout * MSEC_TO_USEC);
 
-    cleanup:
+cleanup:
     return err;
 }
-
-
 
 err_t safe_close_fd(int *fd) {
     err_t err = NO_ERROR;
@@ -60,11 +56,11 @@ err_t safe_close_fd(int *fd) {
         *fd = FD_INVALID;
     }
 
-    cleanup:
+cleanup:
     return err;
 }
 
-static size_t get_path_part_size(const char* path) {
+static size_t get_path_part_size(const char *path) {
     for (size_t i = 0; i < strlen(path); i++) {
         if (path[i] == '/') {
             return i;
@@ -73,7 +69,7 @@ static size_t get_path_part_size(const char* path) {
     return strlen(path);
 }
 
-static bool is_path_part_eq(const char* a, const char* b) {
+static bool is_path_part_eq(const char *a, const char *b) {
     size_t a_part_sz = get_path_part_size(a);
     size_t b_part_sz = get_path_part_size(b);
     if (a_part_sz != b_part_sz) {
@@ -87,9 +83,7 @@ static bool is_path_part_eq(const char* a, const char* b) {
     return true;
 }
 
-static void advance_to_next_part(const char** str) {
-   *str += MIN(strlen(*str), get_path_part_size(*str) + 1);
-}
+static void advance_to_next_part(const char **str) { *str += MIN(strlen(*str), get_path_part_size(*str) + 1); }
 
 err_t join_paths(const char *a, const char *b, char *out_buff, unsigned long out_len) {
     err_t err = NO_ERROR;
@@ -98,7 +92,7 @@ err_t join_paths(const char *a, const char *b, char *out_buff, unsigned long out
     ASSERT(b);
     ASSERT(out_buff);
 
-    char* sep = a[strlen(a) - 1] == '/' ? "" : "/";
+    char *sep = a[strlen(a) - 1] == '/' ? "" : "/";
 
     snprintf(out_buff, out_len, "%s%s%s", a, sep, b);
 
@@ -106,7 +100,7 @@ cleanup:
     return err;
 }
 
-err_t relative_to(const char* path, const char *dir, char *out_buff, unsigned long out_len) {
+err_t relative_to(const char *path, const char *dir, char *out_buff, unsigned long out_len) {
     err_t err = NO_ERROR;
 
     ASSERT(path);
@@ -138,7 +132,7 @@ cleanup:
     return err;
 }
 
-err_t is_relative_to(const char* path, const char* parent, bool* out) {
+err_t is_relative_to(const char *path, const char *parent, bool *out) {
     err_t err = NO_ERROR;
 
     ASSERT(path);

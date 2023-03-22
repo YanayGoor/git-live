@@ -1,8 +1,8 @@
 #define _GNU_SOURCE
 #include "../lib/err.h"
-#include "utils.h"
 #include "../lib/layout/layout.h"
 #include "ncurses_layout.h"
+#include "utils.h"
 #include <curses.h>
 #include <fcntl.h>
 #include <git2.h>
@@ -16,8 +16,8 @@
 #include <string.h>
 #include <sys/inotify.h>
 #include <sys/queue.h>
-#include <unistd.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #define REFLOG_CO_PREFIX "checkout:"
 
@@ -41,6 +41,9 @@
 #define ASSERT_NCURSES_PRINT(expr) ASSERT_PRINT(expr != ERR)
 
 #define GIT_RETRY_COUNT (10)
+
+#define TERMINAL_HASH_LEN (16)
+#define SESSION_ID_LEN (4)
 
 struct ref {
     char *name;
@@ -276,7 +279,8 @@ cleanup:
     return err;
 }
 
-static err_t format_path(const char* path, const char* git_dir, const char *attached_dir, char *out_buff, unsigned long out_len) {
+static err_t format_path(const char *path, const char *git_dir, const char *attached_dir, char *out_buff,
+                         unsigned long out_len) {
     err_t err = NO_ERROR;
     bool is_relative = FALSE;
     char abs_path[PATH_MAX] = {0};
@@ -300,7 +304,8 @@ cleanup:
     return err;
 }
 
-void print_status_entry(const char *git_dir, const char *attached_dir, const git_status_entry *entry, char *buff, size_t len) {
+void print_status_entry(const char *git_dir, const char *attached_dir, const git_status_entry *entry, char *buff,
+                        size_t len) {
     const char *status = "";
     if (entry->status & (GIT_STATUS_INDEX_NEW | GIT_STATUS_WT_NEW)) {
         status = "new";
@@ -315,8 +320,10 @@ void print_status_entry(const char *git_dir, const char *attached_dir, const git
         if (strcmp(entry->head_to_index->new_file.path, entry->head_to_index->old_file.path) != 0) {
             char old_filename[PATH_MAX] = {0};
             char new_filename[PATH_MAX] = {0};
-            format_path(entry->head_to_index->old_file.path, git_dir, attached_dir, old_filename, sizeof(old_filename) - 1);
-            format_path(entry->head_to_index->new_file.path, git_dir, attached_dir, new_filename, sizeof(new_filename) - 1);
+            format_path(entry->head_to_index->old_file.path, git_dir, attached_dir, old_filename,
+                        sizeof(old_filename) - 1);
+            format_path(entry->head_to_index->new_file.path, git_dir, attached_dir, new_filename,
+                        sizeof(new_filename) - 1);
             snprintf(buff, len, "   %s: %s->%s", status, old_filename, new_filename);
         } else {
             char filename[PATH_MAX] = {0};
@@ -328,8 +335,10 @@ void print_status_entry(const char *git_dir, const char *attached_dir, const git
         if (strcmp(entry->index_to_workdir->new_file.path, entry->index_to_workdir->old_file.path) != 0) {
             char old_filename[PATH_MAX] = {0};
             char new_filename[PATH_MAX] = {0};
-            format_path(entry->index_to_workdir->old_file.path, git_dir, attached_dir, old_filename, sizeof(old_filename) - 1);
-            format_path(entry->index_to_workdir->new_file.path, git_dir, attached_dir, new_filename, sizeof(new_filename) - 1);
+            format_path(entry->index_to_workdir->old_file.path, git_dir, attached_dir, old_filename,
+                        sizeof(old_filename) - 1);
+            format_path(entry->index_to_workdir->new_file.path, git_dir, attached_dir, new_filename,
+                        sizeof(new_filename) - 1);
             snprintf(buff, len, "   %s: %s->%s", status, old_filename, new_filename);
         } else {
             char filename[PATH_MAX] = {0};
@@ -339,7 +348,7 @@ void print_status_entry(const char *git_dir, const char *attached_dir, const git
     }
 }
 
-err_t safe_git_status_list_new(git_status_list** status_list, git_repository* repo, git_status_options* opts) {
+err_t safe_git_status_list_new(git_status_list **status_list, git_repository *repo, git_status_options *opts) {
     err_t err = NO_ERROR;
     uint32_t retries = 0;
     int inner_err = 0;
@@ -350,7 +359,8 @@ err_t safe_git_status_list_new(git_status_list** status_list, git_repository* re
 
     while (retries++ < GIT_RETRY_COUNT) {
         inner_err = git_status_list_new(status_list, repo, opts);
-        if (!inner_err) goto cleanup;
+        if (!inner_err)
+            goto cleanup;
     }
     ABORT();
 
@@ -474,7 +484,7 @@ cleanup:
     return err;
 }
 
-err_t get_attached_terminal_hash(char *session_id, char *out, uint32_t out_len, bool* successful) {
+err_t get_attached_terminal_hash(char *session_id, char *out, uint32_t out_len, bool *successful) {
     err_t err = NO_ERROR;
     char cache_dir[PATH_MAX] = {0};
     char attached_file[PATH_MAX] = {0};
@@ -597,9 +607,9 @@ cleanup:
 }
 
 err_t try_get_attached_terminal_workdir(char *session_id, char *out, uint32_t out_len, char *inotify_watch_path,
-                                        uint32_t inotify_watch_path_len, bool* successful) {
+                                        uint32_t inotify_watch_path_len, bool *successful) {
     err_t err = NO_ERROR;
-    char terminal_hash[17] = {0};
+    char terminal_hash[TERMINAL_HASH_LEN + 1] = {0};
     char terminal_workdir_path[PATH_MAX] = {0};
 
     RETHROW(get_attached_terminal_hash(session_id, terminal_hash, sizeof(terminal_hash) - 1, successful));
@@ -621,7 +631,8 @@ err_t gen_session_id(char *out, uint32_t out_len) {
 
     ASSERT(out);
 
-    snprintf(out, out_len, "1111");
+    srand(time(NULL));
+    snprintf(out, out_len, "%02x", rand());
 
 cleanup:
     return err;
@@ -636,7 +647,7 @@ int _main() {
     char prev_inotify_new_pwd_path[PATH_MAX] = {0};
     char inotify_new_pwd_path[PATH_MAX] = {0};
     char head_name[100] = {0};
-    char hex[5] = {0};
+    char session_id[SESSION_ID_LEN + 1] = {0};
     git_buf buf = {NULL, 0, 0};
     struct refs refs = LIST_HEAD_INITIALIZER();
     struct layout *layout = NULL;
@@ -661,7 +672,7 @@ int _main() {
     ASSERT(!git_repository_discover(&buf, cwd, 0, "/"));
     ASSERT(!git_repository_open(&repo, buf.ptr));
 
-    RETHROW(gen_session_id(hex, sizeof(hex)));
+    RETHROW(gen_session_id(session_id, sizeof(session_id)));
 
     ASSERT_NCURSES(curs_set(0));
     ASSERT_NCURSES(start_color());
@@ -724,8 +735,8 @@ int _main() {
         }
 
         memcpy(new_pwd, cwd, sizeof(new_pwd) - 1);
-        try_get_attached_terminal_workdir(hex, new_pwd, sizeof(new_pwd) - 1, inotify_new_pwd_path,
-                                                  sizeof(inotify_new_pwd_path) - 1, &is_attached);
+        try_get_attached_terminal_workdir(session_id, new_pwd, sizeof(new_pwd) - 1, inotify_new_pwd_path,
+                                          sizeof(inotify_new_pwd_path) - 1, &is_attached);
 
         if (inotify != -1 &&
             memcmp(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path))) {
@@ -766,7 +777,7 @@ int _main() {
         title->padding_right = 1;
         RETHROW(append_text(title, "Git Live"));
         RETHROW(append_text(title, " (session "));
-        RETHROW(append_text(title, hex));
+        RETHROW(append_text(title, session_id));
         if (is_attached) {
             RETHROW(append_text(title, " <attached>"));
         }
