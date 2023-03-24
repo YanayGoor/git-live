@@ -44,6 +44,7 @@
 
 #define TERMINAL_HASH_LEN (16)
 #define SESSION_ID_LEN (4)
+#define ERR_BUFF_LEN (4096)
 
 struct ref {
     char *name;
@@ -666,6 +667,7 @@ void interrupt_handler() { keep_running = 0; }
 
 int run_dashboard() {
     err_t err = NO_ERROR;
+    char err_buff[ERR_BUFF_LEN] = {0};
     char cwd[PATH_MAX] = {0};
     char new_pwd[PATH_MAX] = {0};
     char prev_inotify_new_pwd_path[PATH_MAX] = {0};
@@ -688,6 +690,7 @@ int run_dashboard() {
     bool is_attached = false;
 
     signal(SIGINT, interrupt_handler);
+    init_stderr_buffering(err_buff, sizeof(err_buff));
 
     ASSERT(getcwd(cwd, PATH_MAX));
     ASSERT(getcwd(new_pwd, PATH_MAX));
@@ -853,6 +856,8 @@ cleanup:
     RETHROW_PRINT(free_layout(layout));
     ASSERT_NCURSES_PRINT(delwin(win));
     ASSERT_NCURSES_PRINT(endwin());
+    flush_stderr_buff();
+    deinit_stderr_buff();
     return err;
 }
 
