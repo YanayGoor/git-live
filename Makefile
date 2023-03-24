@@ -1,6 +1,6 @@
 NAME := git-live
 VERSION := 0.1.0
-DEB_ARCH := $(shell dpkg --print-architecture)
+DEB_ARCH := $(shell dpkg --print-architecture 2> /dev/null)
 DEB_PATH := $(NAME)_$(VERSION)_$(DEB_ARCH)
 
 CC = gcc
@@ -10,6 +10,7 @@ CFLAGS := -Wall -Wextra -Werror -g -std=c11 -D_BSD_SOURCE -D_DEFAULT_SOURCE
 SRC += src/main.c
 SRC += src/utils.c
 SRC += src/ncurses_layout.c
+SRC += lib/err.c
 OBJ = $(patsubst %.c,%.o,$(SRC))
 
 STATIC_LIBS += lib/layout/liblayout.a
@@ -24,7 +25,7 @@ Version: $(VERSION)
 Architecture: $(DEB_ARCH)
 Maintainer: Yanay Goor <yanay.goor@gmail.com>
 Description: A live git dashboard.
-Depends: $(shell mkdir -p debian/control; RESULT=`dpkg-shlibdeps -O $(NAME)` && echo "$${RESULT#'shlibs:Depends='}"; rm -r debian)
+Depends: $(shell mkdir -p debian/control; RESULT=`dpkg-shlibdeps -O $(NAME) 2> /dev/null` && echo "$${RESULT#'shlibs:Depends='}"; rm -r debian)
 endef
 export DEBIAN_CONTROL
 

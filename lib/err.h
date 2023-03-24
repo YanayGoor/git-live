@@ -2,7 +2,7 @@
 #define GIT_LIVE_ERR_H
 
 #include <stdio.h>
-#include "errno.h"
+#include <errno.h>
 
 typedef int err_t;
 
@@ -45,5 +45,9 @@ typedef int err_t;
     goto cleanup; \
   } \
 } while (0)
+
+void init_stderr_buffering(char* buff, size_t sz);
+void flush_stderr_buff();
+void deinit_stderr_buff();
 
 #endif //GIT_LIVE_ERR_H
