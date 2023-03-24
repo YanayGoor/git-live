@@ -8,6 +8,7 @@ LD = ld
 CFLAGS := -Wall -Wextra -Werror -g -std=c11 -D_BSD_SOURCE -D_DEFAULT_SOURCE
 
 SRC += src/main.c
+SRC += src/utils.c
 SRC += src/ncurses_layout.c
 OBJ = $(patsubst %.c,%.o,$(SRC))
 
@@ -39,9 +40,12 @@ Requires: libgit2 >=
 %build
 %install
 mkdir -p %{buildroot}/usr/bin
+mkdir -p %{buildroot}/etc/profile.d/
 %{__cp} %{_sourcedir}/$(NAME) %{buildroot}/usr/bin
+%{__cp} %{_sourcedir}/$(NAME).sh %{buildroot}/etc/profile.d
 %files
 /usr/bin/$(NAME)
+/etc/profile.d/$(NAME).sh
 endef
 export RPM_SPEC
 
@@ -70,6 +74,8 @@ deb: $(NAME)
 	rm -rf $(DEB_PATH)
 	mkdir $(DEB_PATH)
 	mkdir -p $(DEB_PATH)/usr/bin
+	mkdir -p $(DEB_PATH)/etc/profile.d/
+	cp package_files/$(NAME).sh $(DEB_PATH)/etc/profile.d/
 	cp $(NAME) $(DEB_PATH)/usr/bin/
 	mkdir -p $(DEB_PATH)/DEBIAN
 	touch $(DEB_PATH)/DEBIAN/control
@@ -84,6 +90,7 @@ rpm: $(NAME)
 	rpmdev-setuptree
 	echo "$$RPM_SPEC" >> ~/rpmbuild/SPECS/$(NAME).spec
 	cp $(NAME) ~/rpmbuild/SOURCES
+	cp package_files/$(NAME).sh ~/rpmbuild/SOURCES
 	rpmbuild -ba  ~/rpmbuild/SPECS/$(NAME).spec
 	mkdir -p build/
 	cp ~/rpmbuild/RPMS/*/$(NAME)* build

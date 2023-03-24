@@ -1,10 +1,14 @@
+#define _GNU_SOURCE
 #include "../lib/err.h"
 #include "../lib/layout/layout.h"
 #include "ncurses_layout.h"
+#include "utils.h"
 #include <curses.h>
+#include <fcntl.h>
 #include <git2.h>
 #include <linux/limits.h>
 #include <poll.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -12,15 +16,12 @@
 #include <string.h>
 #include <sys/inotify.h>
 #include <sys/queue.h>
-#include <sys/time.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #define REFLOG_CO_PREFIX "checkout:"
 
 #define CHECKOUT_MAX_LEN 100
-
-#define MAX(x, y) (((x) > (y)) ? (x) : (y))
-#define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 #define COLOR_UNTRACKED 33
 #define COLOR_NOT_STAGED 34
@@ -32,15 +33,17 @@
 #define COLOR_COMMIT_DATE 39
 #define COLOR_COMMIT_USER 40
 
-#define MSEC_TO_USEC (1000)
-
 #define INOTIFY_INVALID (-1)
 #define WATCH_INVALID (-1)
+#define FD_INVALID (-1)
 
 #define ASSERT_NCURSES(expr) ASSERT(expr != ERR)
 #define ASSERT_NCURSES_PRINT(expr) ASSERT_PRINT(expr != ERR)
 
 #define GIT_RETRY_COUNT (10)
+
+#define TERMINAL_HASH_LEN (16)
+#define SESSION_ID_LEN (4)
 
 struct ref {
     char *name;
@@ -51,21 +54,6 @@ struct ref {
 LIST_HEAD(refs, ref);
 
 static volatile bool keep_running = TRUE;
-
-void get_human_readable_time(git_time_t t, char *buff, size_t len) {
-    int64_t diff = time(NULL) - t;
-    if (diff < 60) {
-        snprintf(buff, len, "now");
-    } else if (diff < 60 * 60) {
-        snprintf(buff, len, "%ld minutes ago", diff / 60);
-    } else if (diff < 60 * 60 * 24) {
-        snprintf(buff, len, "%ld hours ago", diff / 60 / 60);
-    } else if (diff < 60 * 60 * 24 * 7) {
-        snprintf(buff, len, "%ld days ago", diff / 60 / 60 / 24);
-    } else {
-        snprintf(buff, len, "%ld weeks ago", diff / 60 / 60 / 24 / 7);
-    }
-}
 
 bool is_checkout_reflog(const git_reflog_entry *entry) {
     const char *message = git_reflog_entry_message(entry);
@@ -263,7 +251,7 @@ err_t print_latest_commits(struct node *node, git_repository *repo, int max) {
 
         append_styled_text(user_col, git_commit_committer(commit)->name, COLOR_COMMIT_USER, WA_DIM);
 
-        get_human_readable_time(git_commit_time(commit), time, 15);
+        RETHROW(get_human_readable_time(git_commit_time(commit), time, 15));
         append_styled_text(time_col, time, COLOR_COMMIT_DATE, 0);
 
         git_commit_free(commit);
@@ -291,7 +279,33 @@ cleanup:
     return err;
 }
 
-void print_status_entry(const git_status_entry *entry, char *buff, size_t len) {
+static err_t format_path(const char *path, const char *git_dir, const char *attached_dir, char *out_buff,
+                         unsigned long out_len) {
+    err_t err = NO_ERROR;
+    bool is_relative = FALSE;
+    char abs_path[PATH_MAX] = {0};
+
+    ASSERT(path);
+    ASSERT(git_dir);
+    ASSERT(attached_dir);
+    ASSERT(out_buff);
+    ASSERT(out_len > 1);
+
+    RETHROW(is_relative_to(git_dir, attached_dir, &is_relative));
+    if (is_relative) {
+        strncpy(out_buff, path, out_len);
+        goto cleanup;
+    }
+
+    RETHROW(join_paths(git_dir, path, abs_path, sizeof(abs_path)));
+    RETHROW(relative_to(abs_path, attached_dir, out_buff, out_len));
+
+cleanup:
+    return err;
+}
+
+void print_status_entry(const char *git_dir, const char *attached_dir, const git_status_entry *entry, char *buff,
+                        size_t len) {
     const char *status = "";
     if (entry->status & (GIT_STATUS_INDEX_NEW | GIT_STATUS_WT_NEW)) {
         status = "new";
@@ -304,23 +318,37 @@ void print_status_entry(const git_status_entry *entry, char *buff, size_t len) {
     }
     if (entry->head_to_index) {
         if (strcmp(entry->head_to_index->new_file.path, entry->head_to_index->old_file.path) != 0) {
-            snprintf(buff, len, "   %s: %s->%s", status, entry->head_to_index->old_file.path,
-                     entry->head_to_index->new_file.path);
+            char old_filename[PATH_MAX] = {0};
+            char new_filename[PATH_MAX] = {0};
+            format_path(entry->head_to_index->old_file.path, git_dir, attached_dir, old_filename,
+                        sizeof(old_filename) - 1);
+            format_path(entry->head_to_index->new_file.path, git_dir, attached_dir, new_filename,
+                        sizeof(new_filename) - 1);
+            snprintf(buff, len, "   %s: %s->%s", status, old_filename, new_filename);
         } else {
-            snprintf(buff, len, "   %s: %s", status, entry->head_to_index->new_file.path);
+            char filename[PATH_MAX] = {0};
+            format_path(entry->head_to_index->new_file.path, git_dir, attached_dir, filename, sizeof(filename) - 1);
+            snprintf(buff, len, "   %s: %s", status, filename);
         }
     }
     if (entry->index_to_workdir) {
         if (strcmp(entry->index_to_workdir->new_file.path, entry->index_to_workdir->old_file.path) != 0) {
-            snprintf(buff, len, "   %s: %s->%s", status, entry->index_to_workdir->old_file.path,
-                     entry->index_to_workdir->new_file.path);
+            char old_filename[PATH_MAX] = {0};
+            char new_filename[PATH_MAX] = {0};
+            format_path(entry->index_to_workdir->old_file.path, git_dir, attached_dir, old_filename,
+                        sizeof(old_filename) - 1);
+            format_path(entry->index_to_workdir->new_file.path, git_dir, attached_dir, new_filename,
+                        sizeof(new_filename) - 1);
+            snprintf(buff, len, "   %s: %s->%s", status, old_filename, new_filename);
         } else {
-            snprintf(buff, len, "   %s: %s", status, entry->index_to_workdir->new_file.path);
+            char filename[PATH_MAX] = {0};
+            format_path(entry->index_to_workdir->new_file.path, git_dir, attached_dir, filename, sizeof(filename) - 1);
+            snprintf(buff, len, "   %s: %s", status, filename);
         }
     }
 }
 
-err_t safe_git_status_list_new(git_status_list** status_list, git_repository* repo, git_status_options* opts) {
+err_t safe_git_status_list_new(git_status_list **status_list, git_repository *repo, git_status_options *opts) {
     err_t err = NO_ERROR;
     uint32_t retries = 0;
     int inner_err = 0;
@@ -331,7 +359,8 @@ err_t safe_git_status_list_new(git_status_list** status_list, git_repository* re
 
     while (retries++ < GIT_RETRY_COUNT) {
         inner_err = git_status_list_new(status_list, repo, opts);
-        if (!inner_err) goto cleanup;
+        if (!inner_err)
+            goto cleanup;
     }
     ABORT();
 
@@ -339,9 +368,9 @@ cleanup:
     return err;
 }
 
-err_t print_status(struct node *node, git_repository *repo) {
+err_t print_status(const char *pwd, const char *new_pwd, struct node *node, git_repository *repo) {
     err_t err = NO_ERROR;
-    char buff[200] = {0};
+    char buff[PATH_MAX] = {0};
     git_status_list *status_list;
     git_status_options opts = {.version = GIT_STATUS_OPTIONS_VERSION,
                                .flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED,
@@ -357,7 +386,7 @@ err_t print_status(struct node *node, git_repository *repo) {
     append_text(node, " staged:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
         const git_status_entry *entry = git_status_byindex(status_list, i);
-        print_status_entry(entry, buff, 200);
+        print_status_entry(pwd, new_pwd, entry, buff, sizeof(buff));
         append_styled_text(node, buff, COLOR_STAGED, 0);
     }
     git_status_list_free(status_list);
@@ -369,7 +398,7 @@ err_t print_status(struct node *node, git_repository *repo) {
     append_text(node, " changed:");
     for (size_t i = 0; i < git_status_list_entrycount(status_list); i++) {
         const git_status_entry *entry = git_status_byindex(status_list, i);
-        print_status_entry(entry, buff, 200);
+        print_status_entry(pwd, new_pwd, entry, buff, sizeof(buff));
         append_styled_text(node, buff, COLOR_NOT_STAGED, 0);
     }
     git_status_list_free(status_list);
@@ -385,7 +414,7 @@ err_t print_status(struct node *node, git_repository *repo) {
         if (entry->index_to_workdir && entry->index_to_workdir->status != GIT_DELTA_UNTRACKED) {
             continue;
         }
-        print_status_entry(entry, buff, 200);
+        print_status_entry(pwd, new_pwd, entry, buff, sizeof(buff));
         append_styled_text(node, buff, COLOR_UNTRACKED, 0);
     }
     git_status_list_free(status_list);
@@ -394,7 +423,31 @@ cleanup:
     return err;
 }
 
-err_t try_initialize_inotify(char *path, int *out) {
+err_t get_root_repo_path(const char *path, uint32_t path_len, char *out, uint32_t out_len) {
+    err_t err = NO_ERROR;
+    bool found = FALSE;
+
+    ASSERT(path);
+    ASSERT(out);
+
+    for (uint32_t i = 0; i < path_len; i++) {
+        if (!strncmp(path + i, "/.git/modules/", MIN(path_len - i, strlen("/.git/modules/")))) {
+            memcpy(out, path, MIN(out_len, i));
+            out[i] = '\0';
+            found = TRUE;
+            break;
+        }
+    }
+
+    if (!found) {
+        memcpy(out, path, MIN(out_len, path_len));
+    }
+
+cleanup:
+    return err;
+}
+
+err_t try_initialize_inotify(const char *path, int *out) {
     err_t err = NO_ERROR;
 
     ASSERT(path);
@@ -441,12 +494,169 @@ cleanup:
     return err;
 }
 
-err_t wait_for_ms(int timeout) {
+err_t get_cache_dir(char *buff, uint32_t maxlen) {
     err_t err = NO_ERROR;
 
-    ASSERT(timeout < 1000000);
+    ASSERT(buff);
 
-    usleep(timeout * MSEC_TO_USEC);
+    struct passwd *pw = getpwuid(getuid());
+    const char *homedir = pw->pw_dir;
+
+    snprintf(buff, maxlen, "%s/%s", homedir, ".cache/git-live");
+
+cleanup:
+    return err;
+}
+
+err_t get_attached_terminal_hash(char *session_id, char *out, uint32_t out_len, bool *successful) {
+    err_t err = NO_ERROR;
+    char cache_dir[PATH_MAX] = {0};
+    char attached_file[PATH_MAX] = {0};
+    int fd = FD_INVALID;
+
+    ASSERT(session_id);
+    ASSERT(out);
+    ASSERT(successful);
+
+    RETHROW(get_cache_dir(cache_dir, sizeof(cache_dir)));
+
+    *successful = false;
+
+    uint32_t written = snprintf(attached_file, sizeof(attached_file), "%s/%s/%s", cache_dir, "attached", session_id);
+    ASSERT(written < sizeof(attached_file));
+
+    fd = open(attached_file, O_RDONLY);
+    if (fd == FD_INVALID) {
+        *successful = false;
+        goto cleanup;
+    }
+
+    ssize_t res = read(fd, out, out_len);
+    if (res <= 0) {
+        *successful = false;
+        goto cleanup;
+    }
+
+    *successful = true;
+
+cleanup:
+    RETHROW_PRINT(safe_close_fd(&fd));
+    return err;
+}
+
+err_t set_attached_terminal_hash(char *session_id, char *terminal_hash) {
+    err_t err = NO_ERROR;
+    char cache_dir[PATH_MAX] = {0};
+    char attached_dir[PATH_MAX] = {0};
+    char attached_file[PATH_MAX] = {0};
+    struct stat st = {0};
+    int fd = FD_INVALID;
+
+    ASSERT(session_id);
+
+    RETHROW(get_cache_dir(cache_dir, sizeof(cache_dir)));
+
+    uint32_t written = snprintf(attached_dir, sizeof(attached_dir), "%s/%s", cache_dir, "attached");
+    ASSERT(written < sizeof(attached_dir));
+
+    if (stat(attached_dir, &st) == -1) {
+        mkdir(attached_dir, S_IXUSR | S_IWUSR | S_IRUSR);
+    }
+
+    written = snprintf(attached_file, sizeof(attached_file), "%s/%s", attached_dir, session_id);
+    ASSERT(written < sizeof(attached_file));
+
+    fd = open(attached_file, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
+    ASSERT(fd != FD_INVALID);
+
+    ssize_t res = write(fd, terminal_hash, strlen(terminal_hash) + 1);
+    ASSERT(res == (int32_t)strlen(terminal_hash) + 1);
+
+cleanup:
+    RETHROW_PRINT(safe_close_fd(&fd));
+    return err;
+}
+
+err_t clear_attached_terminal_hash(char *session_id) {
+    err_t err = NO_ERROR;
+    char cache_dir[PATH_MAX] = {0};
+    char attached_file[PATH_MAX] = {0};
+    int fd = FD_INVALID;
+
+    ASSERT(session_id);
+
+    RETHROW(get_cache_dir(cache_dir, sizeof(cache_dir)));
+
+    uint32_t written = snprintf(attached_file, sizeof(attached_file), "%s/%s/%s", cache_dir, "attached", session_id);
+    ASSERT(written < sizeof(attached_file));
+
+    ASSERT(!unlink(attached_file));
+
+cleanup:
+    RETHROW_PRINT(safe_close_fd(&fd));
+    return err;
+}
+
+err_t get_terminal_workdir_path(char *terminal_hash, char *out, uint32_t out_len) {
+    err_t err = NO_ERROR;
+    char cache_dir[PATH_MAX] = {0};
+
+    ASSERT(terminal_hash);
+    ASSERT(out);
+
+    RETHROW(get_cache_dir(cache_dir, sizeof(cache_dir)));
+
+    uint32_t written = snprintf(out, out_len, "%s/%s/%s", cache_dir, "workdirs", terminal_hash);
+    ASSERT(written < out_len);
+
+cleanup:
+    return err;
+}
+
+err_t get_terminal_workdir(char *terminal_workdir_path, char *out, uint32_t out_len) {
+    err_t err = NO_ERROR;
+
+    int fd = open(terminal_workdir_path, O_RDONLY);
+    if (fd == -1)
+        goto cleanup;
+
+    ssize_t res = read(fd, out, out_len);
+    out[res - 1] = '\0'; // override newline with null terminator
+    if (res <= 0)
+        goto cleanup;
+
+cleanup:
+    RETHROW_PRINT(safe_close_fd(&fd));
+    return err;
+}
+
+err_t try_get_attached_terminal_workdir(char *session_id, char *out, uint32_t out_len, char *inotify_watch_path,
+                                        uint32_t inotify_watch_path_len, bool *successful) {
+    err_t err = NO_ERROR;
+    char terminal_hash[TERMINAL_HASH_LEN + 1] = {0};
+    char terminal_workdir_path[PATH_MAX] = {0};
+
+    RETHROW(get_attached_terminal_hash(session_id, terminal_hash, sizeof(terminal_hash) - 1, successful));
+    if (!*successful) {
+        goto cleanup;
+    }
+
+    RETHROW(get_terminal_workdir_path(terminal_hash, terminal_workdir_path, sizeof(terminal_workdir_path) - 1));
+    RETHROW(get_terminal_workdir(terminal_workdir_path, out, out_len));
+
+    strncpy(inotify_watch_path, terminal_workdir_path, inotify_watch_path_len);
+
+cleanup:
+    return err;
+}
+
+err_t gen_session_id(char *out, uint32_t out_len) {
+    err_t err = NO_ERROR;
+
+    ASSERT(out);
+
+    srand(time(NULL));
+    snprintf(out, out_len, "%02x", rand());
 
 cleanup:
     return err;
@@ -454,11 +664,15 @@ cleanup:
 
 void interrupt_handler() { keep_running = 0; }
 
-int main() {
+int run_dashboard() {
     err_t err = NO_ERROR;
     char cwd[PATH_MAX] = {0};
+    char new_pwd[PATH_MAX] = {0};
+    char prev_inotify_new_pwd_path[PATH_MAX] = {0};
+    char inotify_new_pwd_path[PATH_MAX] = {0};
+    char repo_root[PATH_MAX] = {0};
     char head_name[100] = {0};
-    git_buf buf = {NULL, 0, 0};
+    char session_id[SESSION_ID_LEN + 1] = {0};
     struct refs refs = LIST_HEAD_INITIALIZER();
     struct layout *layout = NULL;
     struct node *top_header = NULL;
@@ -470,15 +684,21 @@ int main() {
     WINDOW *win = NULL;
     git_repository *repo = NULL;
     int inotify = INOTIFY_INVALID;
+    int inotify_pwd_path = INOTIFY_INVALID;
+    bool is_attached = false;
 
     signal(SIGINT, interrupt_handler);
 
-    ASSERT(win = initscr());
     ASSERT(getcwd(cwd, PATH_MAX));
+    ASSERT(getcwd(new_pwd, PATH_MAX));
     ASSERT(git_libgit2_init() > 0);
-    ASSERT(!git_repository_discover(&buf, cwd, 0, NULL));
-    ASSERT(!git_repository_open(&repo, buf.ptr));
+    ASSERT(!git_repository_open_ext(&repo, cwd, 0, "/"));
 
+    RETHROW(gen_session_id(session_id, sizeof(session_id)));
+
+    RETHROW(get_root_repo_path(git_repository_path(repo), strlen(git_repository_path(repo)), repo_root, PATH_MAX));
+
+    ASSERT(win = initscr());
     ASSERT_NCURSES(curs_set(0));
     ASSERT_NCURSES(start_color());
     ASSERT_NCURSES(use_default_colors());
@@ -530,7 +750,7 @@ int main() {
     bottom->nodes_direction = nodes_direction_columns;
     bottom->padding_left = 1;
 
-    RETHROW(try_initialize_inotify(buf.ptr, &inotify));
+    RETHROW(try_initialize_inotify(git_repository_workdir(repo), &inotify));
 
     while (keep_running) {
         if (inotify == INOTIFY_INVALID) {
@@ -539,13 +759,38 @@ int main() {
             RETHROW(wait_for_inotify_message(inotify, 100));
         }
 
+        memcpy(new_pwd, cwd, sizeof(new_pwd) - 1);
+        try_get_attached_terminal_workdir(session_id, new_pwd, sizeof(new_pwd) - 1, inotify_new_pwd_path,
+                                          sizeof(inotify_new_pwd_path) - 1, &is_attached);
+
+        if(strncmp(cwd, new_pwd, sizeof(cwd))) {
+            bool is_relative = FALSE;
+            RETHROW(is_relative_to(new_pwd, repo_root, &is_relative));
+            if (is_relative) {
+                git_repository *tmp_repo = NULL;
+                ASSERT(!git_repository_open_ext(&tmp_repo, new_pwd, 0, "/"));
+                git_repository_free(repo);
+                repo = tmp_repo;
+            }
+        }
+        memcpy(cwd, new_pwd, sizeof(new_pwd) - 1);
+
+        if (inotify != FD_INVALID &&
+            memcmp(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path))) {
+            if (inotify_pwd_path != INOTIFY_INVALID) {
+                inotify_rm_watch(inotify, inotify_pwd_path);
+            }
+            inotify_pwd_path = inotify_add_watch(inotify, inotify_new_pwd_path, IN_MODIFY);
+        }
+        memcpy(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path));
+
         struct node *top_header_left = NULL;
         struct node *title = NULL;
         struct node *top_header_right = NULL;
         struct node *branch = NULL;
         struct node *padding = NULL;
 
-        RETHROW(print_status(top, repo));
+        RETHROW(print_status(git_repository_workdir(repo), new_pwd, top, repo));
 
         RETHROW(get_latest_refs(&refs, repo, getmaxy(win) - 2)); // we get more and some will be hidden
         RETHROW(print_refs(middle, &refs));
@@ -557,7 +802,7 @@ int main() {
         RETHROW(clear_children(middle_header));
         RETHROW(clear_children(bottom_header));
 
-        RETHROW(get_head_name(repo, head_name, 100));
+        RETHROW(get_head_name(repo, head_name, sizeof(head_name)));
 
         RETHROW(append_child(top_header, &top_header_left));
         top_header_left->expand = 1;
@@ -568,6 +813,12 @@ int main() {
         title->padding_left = 1;
         title->padding_right = 1;
         RETHROW(append_text(title, "Git Live"));
+        RETHROW(append_text(title, " (session "));
+        RETHROW(append_text(title, session_id));
+        if (is_attached) {
+            RETHROW(append_text(title, " <attached>"));
+        }
+        RETHROW(append_text(title, ")"));
 
         RETHROW(append_child(top_header, &top_header_right));
         top_header_right->expand = 1;
@@ -586,7 +837,7 @@ int main() {
         RETHROW(append_child(top_header_right, &padding));
         padding->expand = 1;
 
-        RETHROW(append_text(top_header_right, cwd));
+        RETHROW(append_text(top_header_right, git_repository_workdir(repo)));
 
         RETHROW(append_text(middle_header, "Latest Branches"));
         RETHROW(append_text(bottom_header, "Commits"));
@@ -597,11 +848,82 @@ int main() {
     }
 
 cleanup:
-    git_buf_free(&buf);
     git_repository_free(repo);
     RETHROW_PRINT(clear_refs(&refs));
     RETHROW_PRINT(free_layout(layout));
     ASSERT_NCURSES_PRINT(delwin(win));
     ASSERT_NCURSES_PRINT(endwin());
     return err;
+}
+
+void print_usage() {
+    fprintf(stderr, "Usage: git live <command>\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Commands:\n");
+    fprintf(stderr, "  <none>       Run a new git-live dashboard.\n");
+    fprintf(stderr, "  attach       Attach a running dashboard to the current terminal so that the paths are relative "
+                    "to its cwd.\n");
+    fprintf(stderr, "  detach       Detach a running dashboard from the terminal it is attached to.\n");
+}
+
+err_t attach_terminal_session(char *session_id) {
+    err_t err = NO_ERROR;
+    char *terminal_hash = getenv("GIT_LIVE_TERMINAL_ID");
+
+    ASSERT(terminal_hash);
+    ASSERT(session_id);
+
+    RETHROW(set_attached_terminal_hash(session_id, terminal_hash));
+cleanup:
+    return err;
+}
+
+err_t detach_terminal_session(char *session_id) {
+    err_t err = NO_ERROR;
+
+    ASSERT(session_id);
+
+    RETHROW(clear_attached_terminal_hash(session_id));
+cleanup:
+    return err;
+}
+
+void print_attach_usage() {
+    fprintf(stderr, "Usage: git live attach <session_id>\n");
+}
+
+void print_detach_usage() {
+    fprintf(stderr, "Usage: git live detach <session_id>\n");
+}
+
+int main(int argc, char *argv[]) {
+    if (argc == 1) {
+        return run_dashboard();
+    } else if (!strcmp(argv[1], "attach")) {
+        if (argc == 3 && strcmp(argv[2], "--help")) {
+            return attach_terminal_session(argv[2]);
+        } else if (argc > 3) {
+            fprintf(stderr, "Too many arguments.\n");
+            print_attach_usage();
+        } else {
+            print_attach_usage();
+        }
+    } else if (!strcmp(argv[1], "detach")) {
+        if (argc == 3 && strcmp(argv[2], "--help")) {
+            return detach_terminal_session(argv[2]);
+        } else if (argc > 3) {
+            fprintf(stderr, "Too many arguments.\n");
+            print_detach_usage();
+        } else {
+            print_detach_usage();
+        }
+    } else if (!strcmp(argv[1], "--help")) {
+        print_usage();
+        return 1;
+    } else {
+        fprintf(stderr, "Unknown command: %s\n", argv[1]);
+        print_usage();
+        return 1;
+    }
+    return 0;
 }
