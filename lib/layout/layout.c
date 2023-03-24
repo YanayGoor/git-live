@@ -75,7 +75,9 @@ static uint32_t get_overflow_min_height(struct node *node, struct size max_size)
         // b d |
 
         // start with the max height of all children
-        LIST_FOREACH(curr, &node->nodes, entry) { sz = MAX(sz, get_height(curr, max_size)); }
+        LIST_FOREACH(curr, &node->nodes, entry) {
+            sz = MAX(sz, get_height(curr, max_size));
+        }
 
         // increment the size until all children fit
         while (sz < max_size.height) {
@@ -129,7 +131,9 @@ static uint32_t get_overflow_min_width(struct node *node, struct size max_size) 
         // ---
 
         // start with the max height of all children
-        LIST_FOREACH(curr, &node->nodes, entry) { sz = MAX(sz, get_width(curr, max_size)); }
+        LIST_FOREACH(curr, &node->nodes, entry) {
+            sz = MAX(sz, get_width(curr, max_size));
+        }
 
         // increment the size until all children fit
         while (sz < max_size.width) {
@@ -223,7 +227,7 @@ static err_t print_nodes(struct layout *layout, struct node *nodes, int32_t len,
     struct node *curr;
     int32_t i;
 
-    NODES_FOREACH_N(curr, i, nodes, len) {
+    NODES_FOREACH_N (curr, i, nodes, len) {
         expand_sum += curr->expand;
         min_sizes_sum += MAX(GET_NODE_REQUIRED_SIZE(direction, curr, rect), curr->basis);
         if (curr->expand)
@@ -238,7 +242,7 @@ static err_t print_nodes(struct layout *layout, struct node *nodes, int32_t len,
 
     // handle int rounding gracefully
     int32_t size_used = 0;
-    NODES_FOREACH_N(curr, i, nodes, len) {
+    NODES_FOREACH_N (curr, i, nodes, len) {
         size_used += MAX(curr->expand * expand_to_chars + curr->basis, GET_NODE_REQUIRED_SIZE(direction, curr, rect));
     }
     int32_t total_leftover = SUB_OR_ZERO(max_size, size_used);
@@ -248,7 +252,7 @@ static err_t print_nodes(struct layout *layout, struct node *nodes, int32_t len,
     int32_t curr_pos = direction == nodes_direction_columns ? rect.col : rect.row;
     int32_t end_pos = direction == nodes_direction_columns ? rect.col + rect.width : rect.row + rect.height;
     int32_t curr_weighted_node_index = 0;
-    NODES_FOREACH_N(curr, i, nodes, len) {
+    NODES_FOREACH_N (curr, i, nodes, len) {
         struct rect inner_rect = rect;
         int32_t curr_size =
             MAX(curr->expand * expand_to_chars + curr->basis, GET_NODE_REQUIRED_SIZE(direction, curr, rect));

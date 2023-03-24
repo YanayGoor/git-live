@@ -1,8 +1,4 @@
 #define _GNU_SOURCE
-#include "../lib/err.h"
-#include "../lib/layout/layout.h"
-#include "ncurses_layout.h"
-#include "utils.h"
 #include <curses.h>
 #include <fcntl.h>
 #include <git2.h>
@@ -18,6 +14,10 @@
 #include <sys/queue.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "../lib/err.h"
+#include "../lib/layout/layout.h"
+#include "ncurses_layout.h"
+#include "utils.h"
 
 #define REFLOG_CO_PREFIX "checkout:"
 
@@ -663,7 +663,9 @@ cleanup:
     return err;
 }
 
-void interrupt_handler() { keep_running = 0; }
+void interrupt_handler() {
+    keep_running = 0;
+}
 
 int run_dashboard() {
     err_t err = NO_ERROR;
@@ -766,7 +768,7 @@ int run_dashboard() {
         try_get_attached_terminal_workdir(session_id, new_pwd, sizeof(new_pwd) - 1, inotify_new_pwd_path,
                                           sizeof(inotify_new_pwd_path) - 1, &is_attached);
 
-        if(strncmp(cwd, new_pwd, sizeof(cwd))) {
+        if (strncmp(cwd, new_pwd, sizeof(cwd))) {
             bool is_relative = FALSE;
             RETHROW(is_relative_to(new_pwd, repo_root, &is_relative));
             if (is_relative) {

@@ -1,7 +1,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-void init_stderr_buffering(char* buff, size_t sz) {
+void init_stderr_buffering(char *buff, size_t sz) {
     setvbuf(stderr, buff, _IOFBF, sz);
 }
 

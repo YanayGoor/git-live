@@ -5,3 +5,14 @@ IndentWidth: 4
 ColumnLimit: 120
 ForEachMacros:
   - NODES_FOREACH
+  - NODES_FOREACH_N
+AllowShortFunctionsOnASingleLine: Empty
+IncludeCategories:
+  - Regex: '^<ext/.*\.h>'
+    Priority: 2
+  - Regex: '^<.*\.h>'
+    Priority: 1
+  - Regex: '^<.*'
+    Priority: 2
+  - Regex: '.*'
+    Priority: 3
