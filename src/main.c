@@ -856,7 +856,7 @@ cleanup:
     return err;
 }
 
-err_t print_usage() {
+void print_usage() {
     fprintf(stderr, "Usage: git live <command>\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "Commands:\n");
@@ -864,7 +864,6 @@ err_t print_usage() {
     fprintf(stderr, "  attach       Attach a running dashboard to the current terminal so that the paths are relative "
                     "to its cwd.\n");
     fprintf(stderr, "  detach       Detach a running dashboard from the terminal it is attached to.\n");
-    return 0;
 }
 
 err_t attach_terminal_session(char *session_id) {
@@ -889,14 +888,12 @@ cleanup:
     return err;
 }
 
-err_t print_attach_usage() {
+void print_attach_usage() {
     fprintf(stderr, "Usage: git live attach <session_id>\n");
-    return 0;
 }
 
-err_t print_detach_usage() {
+void print_detach_usage() {
     fprintf(stderr, "Usage: git live detach <session_id>\n");
-    return 0;
 }
 
 int main(int argc, char *argv[]) {
