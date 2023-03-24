@@ -36,7 +36,7 @@ Release: 1%{?dist}
 Summary: A live git dashboard.
 License: GPLv3
 URL: https://github/YanayGoor/git-live
-Requires: libgit2 >=
+Requires: libgit2 >= 0.26.8, ncurses >= 5.9
 %description
 %build
 %install
