@@ -1,5 +1,4 @@
 #include "utils.h"
-#include "../lib/err.h"
 #include <curses.h>
 #include <linux/limits.h>
 #include <stdbool.h>
@@ -7,6 +6,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include "../lib/err.h"
 
 #define FD_INVALID (-1)
 
@@ -83,7 +83,9 @@ static bool is_path_part_eq(const char *a, const char *b) {
     return true;
 }
 
-static void advance_to_next_part(const char **str) { *str += MIN(strlen(*str), get_path_part_size(*str) + 1); }
+static void advance_to_next_part(const char **str) {
+    *str += MIN(strlen(*str), get_path_part_size(*str) + 1);
+}
 
 err_t join_paths(const char *a, const char *b, char *out_buff, unsigned long out_len) {
     err_t err = NO_ERROR;
