@@ -1,17 +1,10 @@
 #include "utils.h"
 #include <curses.h>
-#include <linux/limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include "../lib/err.h"
-
-#define FD_INVALID (-1)
-
-#define MSEC_TO_USEC (1000)
-#define MSEC_IN_SEC (1000000)
 
 err_t get_human_readable_time(int64_t t, char *buff, size_t len) {
     err_t err = NO_ERROR;
@@ -35,17 +28,6 @@ cleanup:
     return err;
 }
 
-err_t wait_for_ms(int timeout) {
-    err_t err = NO_ERROR;
-
-    ASSERT(timeout < MSEC_IN_SEC);
-
-    usleep(timeout * MSEC_TO_USEC);
-
-cleanup:
-    return err;
-}
-
 err_t safe_close_fd(int *fd) {
     err_t err = NO_ERROR;
 
@@ -61,7 +43,8 @@ cleanup:
 }
 
 static size_t get_path_part_size(const char *path) {
-    for (size_t i = 0; i < strlen(path); i++) {
+    size_t len = strlen(path);
+    for (size_t i = 0; i < len; i++) {
         if (path[i] == '/') {
             return i;
         }

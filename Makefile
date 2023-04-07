@@ -5,11 +5,12 @@ DEB_PATH := $(NAME)_$(VERSION)_$(DEB_ARCH)
 
 CC = gcc
 LD = ld
-CFLAGS := -Wall -Wextra -Werror -g -std=c11 -D_BSD_SOURCE -D_DEFAULT_SOURCE
+CFLAGS := -Wall -Wextra -Werror -std=c11 -D_BSD_SOURCE -D_DEFAULT_SOURCE
 
 SRC += src/main.c
 SRC += src/utils.c
 SRC += src/ncurses_layout.c
+SRC += src/timing.c
 SRC += lib/err.c
 OBJ = $(patsubst %.c,%.o,$(SRC))
 
@@ -17,6 +18,14 @@ STATIC_LIBS += lib/layout/liblayout.a
 
 ifdef CHECK_BOUNDS
 CFLAGS += -D CHECK_BOUNDS
+endif
+
+ifdef DEBUG
+CFLAGS += -g
+endif
+
+ifdef PROFILE
+CFLAGS += -pg
 endif
 
 define DEBIAN_CONTROL
@@ -53,7 +62,7 @@ export RPM_SPEC
 all: $(NAME)
 
 $(NAME): $(OBJ) $(STATIC_LIBS)
-	$(CC) -o $@ $^ -lc -lgit2 -lncurses -ltinfo
+	$(CC) $(CFLAGS) -o $@ $^ -lc -lgit2 -lncurses -ltinfo
 
 lib/layout/liblayout.a: lib/layout/layout.c
 	$(MAKE) -C lib/layout liblayout.a
