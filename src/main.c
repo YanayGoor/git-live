@@ -3,20 +3,19 @@
 #include <fcntl.h>
 #include <git2.h>
 #include <linux/limits.h>
-#include <poll.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/inotify.h>
 #include <sys/queue.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include "../lib/err.h"
 #include "../lib/layout/layout.h"
 #include "ncurses_layout.h"
+#include "timing.h"
 #include "utils.h"
 
 #define REFLOG_CO_PREFIX "checkout:"
@@ -32,10 +31,6 @@
 #define COLOR_COMMIT_TITLE 38
 #define COLOR_COMMIT_DATE 39
 #define COLOR_COMMIT_USER 40
-
-#define INOTIFY_INVALID (-1)
-#define WATCH_INVALID (-1)
-#define FD_INVALID (-1)
 
 #define ASSERT_NCURSES(expr) ASSERT(expr != ERR)
 #define ASSERT_NCURSES_PRINT(expr) ASSERT_PRINT(expr != ERR)
@@ -448,53 +443,6 @@ cleanup:
     return err;
 }
 
-err_t try_initialize_inotify(const char *path, int *out) {
-    err_t err = NO_ERROR;
-
-    ASSERT(path);
-
-    *out = INOTIFY_INVALID;
-
-    int inotify = inotify_init();
-    if (inotify == INOTIFY_INVALID)
-        goto cleanup;
-
-    int watch = inotify_add_watch(inotify, path, IN_MODIFY);
-    if (watch == WATCH_INVALID)
-        goto cleanup;
-
-    *out = inotify;
-
-cleanup:
-    return err;
-}
-
-err_t clear_inotify_message(int inotify) {
-    err_t err = NO_ERROR;
-    char buff[sizeof(struct inotify_event) + NAME_MAX + 1] = {0};
-
-    ASSERT(inotify != INOTIFY_INVALID);
-    read(inotify, buff, sizeof(buff));
-
-cleanup:
-    return err;
-}
-
-err_t wait_for_inotify_message(int inotify, int timeout) {
-    err_t err = NO_ERROR;
-    struct pollfd pollfds[1] = {{.fd = inotify, .events = POLLIN, .revents = 0}};
-
-    ASSERT(inotify != INOTIFY_INVALID);
-
-    int changed = poll(pollfds, 1, timeout);
-    if (changed == 1) {
-        RETHROW(clear_inotify_message(inotify));
-    }
-
-cleanup:
-    return err;
-}
-
 err_t get_cache_dir(char *buff, uint32_t maxlen) {
     err_t err = NO_ERROR;
 
@@ -687,9 +635,10 @@ int run_dashboard() {
     struct node *bottom = NULL;
     WINDOW *win = NULL;
     git_repository *repo = NULL;
-    int inotify = INOTIFY_INVALID;
-    int inotify_pwd_path = INOTIFY_INVALID;
     bool is_attached = false;
+    struct timer *timer = NULL;
+    int workdir_watch_id = INVALID_WATCH_ID;
+    int attached_terminal_watch_id = INVALID_WATCH_ID;
 
     signal(SIGINT, interrupt_handler);
     init_stderr_buffering(err_buff, sizeof(err_buff));
@@ -732,7 +681,6 @@ int run_dashboard() {
     top->expand = 1;
     top->nodes_direction = nodes_direction_rows;
     top->wrap = node_wrap_wrap;
-    // top->padding_left = 1;
     top->fit_content = true;
 
     RETHROW(append_child(&layout->root, &middle_header));
@@ -755,14 +703,16 @@ int run_dashboard() {
     bottom->nodes_direction = nodes_direction_columns;
     bottom->padding_left = 1;
 
-    RETHROW(try_initialize_inotify(git_repository_workdir(repo), &inotify));
+    RETHROW(timing_init(&timer, (struct timer_config){
+                                    .min_timeout = 100,
+                                    .idle_cpu_percent_target = 10,
+                                    .max_cpu_percent_target = 50,
+                                }));
+
+    RETHROW(timing_add_watch(timer, git_repository_workdir(repo), &workdir_watch_id));
 
     while (keep_running) {
-        if (inotify == INOTIFY_INVALID) {
-            RETHROW(wait_for_ms(50));
-        } else {
-            RETHROW(wait_for_inotify_message(inotify, 100));
-        }
+        RETHROW(timing_wait(timer));
 
         memcpy(new_pwd, cwd, sizeof(new_pwd) - 1);
         try_get_attached_terminal_workdir(session_id, new_pwd, sizeof(new_pwd) - 1, inotify_new_pwd_path,
@@ -780,12 +730,12 @@ int run_dashboard() {
         }
         memcpy(cwd, new_pwd, sizeof(new_pwd) - 1);
 
-        if (inotify != FD_INVALID &&
-            memcmp(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path))) {
-            if (inotify_pwd_path != INOTIFY_INVALID) {
-                inotify_rm_watch(inotify, inotify_pwd_path);
+        if (memcmp(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path))) {
+            if (attached_terminal_watch_id != INVALID_WATCH_ID) {
+                RETHROW(timing_modify_watch(timer, &attached_terminal_watch_id, inotify_new_pwd_path));
+            } else {
+                RETHROW(timing_add_watch(timer, inotify_new_pwd_path, &attached_terminal_watch_id));
             }
-            inotify_pwd_path = inotify_add_watch(inotify, inotify_new_pwd_path, IN_MODIFY);
         }
         memcpy(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path));
 
@@ -853,6 +803,7 @@ int run_dashboard() {
     }
 
 cleanup:
+    RETHROW_PRINT(timing_free(timer));
     git_repository_free(repo);
     RETHROW_PRINT(clear_refs(&refs));
     RETHROW_PRINT(free_layout(layout));

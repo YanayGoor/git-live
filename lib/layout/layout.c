@@ -43,9 +43,10 @@ static uint32_t get_str_width(const char *str) {
 
 static uint32_t get_str_height(const char *str) {
     uint32_t sz = 1;
-    for (uint32_t i = 0; i < strlen(str); i++) {
+    size_t len = strlen(str);
+    for (uint32_t i = 0; i < len; i++) {
         // TODO: strip trailing newline if there is only whitespace after it
-        if (str[i] == '\n' && i != strlen(str) - 1) {
+        if (str[i] == '\n' && i != len - 1) {
             sz++;
         }
     }
