@@ -3,18 +3,31 @@ VERSION := 0.2.0
 DEB_ARCH := $(shell dpkg --print-architecture 2> /dev/null)
 DEB_PATH := $(NAME)_$(VERSION)_$(DEB_ARCH)
 
+DEPS = Makefile.depends
+
 CC = gcc
 LD = ld
 CFLAGS := -Wall -Wextra -Werror -std=c11 -D_BSD_SOURCE -D_DEFAULT_SOURCE
+LDLAGS := -lc
 
-SRC += src/main.c
-SRC += src/utils.c
-SRC += src/ncurses_layout.c
-SRC += src/timing.c
-SRC += lib/err.c
-OBJ = $(patsubst %.c,%.o,$(SRC))
+SRCS += src/main.c
+SRCS += src/utils.c
+SRCS += src/dashboard.c
+SRCS += src/attach.c
+SRCS += src/ncurses_layout.c
+SRCS += src/timing.c
+SRCS += lib/err.c
+
+OBJS = $(patsubst %.c,%.o,$(SRCS))
+
+LIBS += -lgit2
+LIBS += -lncurses
+LIBS += -ltinfo
 
 STATIC_LIBS += lib/layout/liblayout.a
+
+# TODO: make this work correctly with clion
+INCLUDES += -I./
 
 ifdef CHECK_BOUNDS
 CFLAGS += -D CHECK_BOUNDS
@@ -61,8 +74,8 @@ export RPM_SPEC
 
 all: $(NAME)
 
-$(NAME): $(OBJ) $(STATIC_LIBS)
-	$(CC) $(CFLAGS) -o $@ $^ -lc -lgit2 -lncurses -ltinfo
+$(NAME): $(OBJS) $(STATIC_LIBS)
+	$(CC) $(LDLAGS) -o $@ $^ $(LIBS) $(INCLUDES)
 
 lib/layout/liblayout.a: lib/layout/layout.c
 	$(MAKE) -C lib/layout liblayout.a
@@ -71,13 +84,13 @@ lib/layout/liblayout.a: lib/layout/layout.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -rf $(NAME) $(OBJ)
+	rm -rf $(NAME) $(OBJS)
 	rm -rf build/
 	rm -rf $(DEB_PATH).deb
 	$(MAKE) -C lib/layout clean
 
 format:
-	clang-format -i $(SRC)
+	clang-format -i $(SRCS)
 	$(MAKE) -C lib/layout format
 
 deb: $(NAME)
@@ -104,6 +117,10 @@ rpm: $(NAME)
 	rpmbuild -ba  ~/rpmbuild/SPECS/$(NAME).spec
 	mkdir -p build/
 	cp ~/rpmbuild/RPMS/*/$(NAME)* build
-	
 
-.PHONY: clean all
+$(DEPS):
+	$(CC) $(INCLUDES) -MM $(SRCS) > $(DEPS)
+
+include $(DEPS)
+
+.PHONY: all clean rpm deb depend
