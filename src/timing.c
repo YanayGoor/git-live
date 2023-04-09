@@ -1,4 +1,5 @@
 #include "timing.h"
+#include <limits.h>
 #include <linux/limits.h>
 #include <malloc.h>
 #include <poll.h>
@@ -6,10 +7,12 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
-#include <limits.h>
 #include "utils.h"
 
 #define INVALID_WATCH_ID (-1)
+
+#define SUBTRACT_OR_ZERO(a, b) ((a) > (b) ? (a) - (b) : 0)
+#define DIVIDE_OR_ZERO(a, b) ((b) != 0 ? (a) / (b) : 0)
 
 struct timer {
     int inotify_fd;
@@ -55,8 +58,11 @@ static err_t timing_calculate_timeout(struct timer *timer, int *out) {
     ASSERT(timer);
     ASSERT(out);
 
-    timeout = MAX((timer->cpu_time_used * 100) / timer->config.idle_cpu_percent_target - timer->total_time_used,
-                  timer->config.min_timeout);
+    ASSERT(timer->config.idle_cpu_percent_target > 0);
+
+    timeout = DIVIDE_OR_ZERO(timer->cpu_time_used * 100, timer->config.idle_cpu_percent_target);
+    timeout = SUBTRACT_OR_ZERO(timeout, timer->total_time_used);
+    timeout = MAX(timeout, timer->config.min_timeout);
 
     ASSERT(timeout < INT_MAX);
     *out = (int)timeout;
