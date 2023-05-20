@@ -1,5 +1,5 @@
 NAME := git-live
-VERSION := 0.2.0
+VERSION := 0.3.0
 DEB_ARCH := $(shell dpkg --print-architecture 2> /dev/null)
 DEB_PATH := $(NAME)_$(VERSION)_$(DEB_ARCH)
 
