@@ -1,7 +1,7 @@
 #include "attach.h"
 #include <fcntl.h>
-#include <limits.h>
 #include <pwd.h>
+#include <linux/limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
