@@ -13,6 +13,7 @@
 #define INVALID_WATCH_ID (-1)
 
 typedef uint8_t percent_t;
+typedef int watch_id_t;
 
 struct timer_config {
     uint32_t min_timeout;
@@ -22,12 +23,11 @@ struct timer_config {
 
 struct timer;
 
-err_t timing_init(struct timer**, struct timer_config);
-err_t timing_free(struct timer*);
+err_t init_timer(struct timer**, struct timer_config);
+err_t free_timer(struct timer*);
 
-err_t timing_add_watch(struct timer*, const char* path, int* out);
-err_t timing_modify_watch(struct timer*, int* watch_id, const char* path);
-err_t timing_remove_watch(struct timer*, int watch_id);
+err_t timing_add_or_modify_watch(struct timer*, watch_id_t* watch_id, const char* path);
+err_t timing_remove_watch(struct timer*, watch_id_t watch_id);
 err_t timing_wait(struct timer*);
 
 #endif //GIT_LIVE_TIMING_H

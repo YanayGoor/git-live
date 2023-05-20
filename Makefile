@@ -7,8 +7,8 @@ DEPS = Makefile.depends
 
 CC = gcc
 LD = ld
-CFLAGS := -Wall -Wextra -Werror -std=c11 -D_BSD_SOURCE -D_DEFAULT_SOURCE
-LDLAGS := -lc
+CFLAGS := -Wall -Wextra -Werror -std=c11 -D_BSD_SOURCE -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=199309L
+LDLAGS := 
 
 SRCS += src/main.c
 SRCS += src/utils.c
@@ -20,6 +20,7 @@ SRCS += lib/err.c
 
 OBJS = $(patsubst %.c,%.o,$(SRCS))
 
+LIBS += -lc
 LIBS += -lgit2
 LIBS += -lncurses
 LIBS += -ltinfo

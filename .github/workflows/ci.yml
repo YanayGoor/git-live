@@ -1,0 +1,32 @@
+name: Release
+on:
+  push:
+  
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: ["ubuntu:22.04", "centos:centos7"]
+        include:
+          - os: ubuntu:22.04
+            install: apt update && apt install -y gcc make libgit2-dev libncurses-dev dpkg-dev
+            target: deb
+          - os: centos:centos7
+            install: yum install -y make gcc rpmdevtools rpmlint libgit2-devel ncurses-devel ncurses-libs
+            target: rpm
+    runs-on: ubuntu-latest
+    container: ${{ matrix.os }}
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - name: Install deps
+      run: ${{ matrix.install }}
+    - name: Build
+      run: make ${{ matrix.target }}
+    - name: Upload package
+      uses: actions/upload-artifact@v3
+      with:
+        name: built package
+        path: "build/*"
