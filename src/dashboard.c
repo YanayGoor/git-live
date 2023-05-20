@@ -529,7 +529,7 @@ err_t run_dashboard() {
     bottom->padding_left = 1;
 
     RETHROW(init_timer(&timer, (struct timer_config){
-                                    .min_timeout = 100,
+                                    .min_timeout = 200,
                                     .idle_cpu_percent_target = 10,
                                     .max_cpu_percent_target = 50,
                                 }));

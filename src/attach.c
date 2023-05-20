@@ -20,6 +20,8 @@ struct attach_session {
     char session_id[SESSION_ID_LEN + 1];
     watch_id_t session_file_watch;
     watch_id_t terminal_file_watch;
+    char prev_session_file_path[PATH_MAX];
+    char prev_terminal_file_path[PATH_MAX];
 };
 
 static err_t gen_session_id(char *out, uint32_t out_len) {
@@ -165,6 +167,8 @@ err_t init_attach_session(struct attach_session** session, struct timer* timer) 
     (*session)->timer = timer;
     (*session)->terminal_file_watch = INVALID_WATCH_ID;
     (*session)->session_file_watch = INVALID_WATCH_ID;
+    memset((*session)->prev_session_file_path, '\0', sizeof((*session)->prev_session_file_path));
+    memset((*session)->prev_terminal_file_path, '\0', sizeof((*session)->prev_terminal_file_path));
 
     RETHROW(gen_session_id((*session)->session_id, sizeof((*session)->session_id)));
 
@@ -212,7 +216,8 @@ err_t get_attached_workdir(struct attach_session* session, char *out, uint32_t o
     RETHROW(get_session_file_path(session->session_id, session_file_path, sizeof(session_file_path)));
 
     RETHROW(file_exists(session_file_path, &does_file_exist));
-    if (does_file_exist) {
+    if (does_file_exist && strcmp(session_file_path, session->prev_session_file_path)) {
+        strcpy(session->prev_session_file_path, session_file_path);
         RETHROW(timing_add_or_modify_watch(session->timer, &session->session_file_watch, session_file_path));
     }
 
@@ -231,7 +236,8 @@ err_t get_attached_workdir(struct attach_session* session, char *out, uint32_t o
     RETHROW(get_terminal_file_path(terminal_hash, terminal_file_path, sizeof(terminal_file_path)));
 
     RETHROW(file_exists(terminal_file_path, &does_file_exist));
-    if (does_file_exist) {
+    if (does_file_exist && strcmp(terminal_file_path, session->prev_terminal_file_path)) {
+        strcpy(session->prev_terminal_file_path, terminal_file_path);
         RETHROW(timing_add_or_modify_watch(session->timer, &session->terminal_file_watch, terminal_file_path));
     }
 
