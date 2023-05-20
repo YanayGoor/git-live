@@ -36,7 +36,6 @@
 
 #define GIT_RETRY_COUNT (10)
 
-#define SESSION_ID_LEN (4)
 #define ERR_BUFF_LEN (4096)
 
 struct ref {
@@ -441,18 +440,6 @@ cleanup:
     return err;
 }
 
-err_t gen_session_id(char *out, uint32_t out_len) {
-    err_t err = NO_ERROR;
-
-    ASSERT(out);
-
-    srand(time(NULL));
-    snprintf(out, out_len, "%02x", rand());
-
-cleanup:
-    return err;
-}
-
 void interrupt_handler() {
     keep_running = 0;
 }
@@ -462,8 +449,6 @@ err_t run_dashboard() {
     char err_buff[ERR_BUFF_LEN] = {0};
     char cwd[PATH_MAX] = {0};
     char new_pwd[PATH_MAX] = {0};
-    char prev_inotify_new_pwd_path[PATH_MAX] = {0};
-    char inotify_new_pwd_path[PATH_MAX] = {0};
     char repo_root[PATH_MAX] = {0};
     char head_name[100] = {0};
     char session_id[SESSION_ID_LEN + 1] = {0};
@@ -479,8 +464,8 @@ err_t run_dashboard() {
     git_repository *repo = NULL;
     bool is_attached = false;
     struct timer *timer = NULL;
+    struct attach_session* attach_session = NULL;
     int workdir_watch_id = INVALID_WATCH_ID;
-    int attached_terminal_watch_id = INVALID_WATCH_ID;
 
     signal(SIGINT, interrupt_handler);
     init_stderr_buffering(err_buff, sizeof(err_buff));
@@ -489,8 +474,6 @@ err_t run_dashboard() {
     ASSERT(getcwd(new_pwd, PATH_MAX));
     ASSERT(git_libgit2_init() > 0);
     ASSERT(!git_repository_open_ext(&repo, cwd, 0, "/"));
-
-    RETHROW(gen_session_id(session_id, sizeof(session_id)));
 
     RETHROW(get_root_repo_path(git_repository_path(repo), strlen(git_repository_path(repo)), repo_root, PATH_MAX));
 
@@ -545,13 +528,14 @@ err_t run_dashboard() {
     bottom->nodes_direction = nodes_direction_columns;
     bottom->padding_left = 1;
 
-    RETHROW(timing_init(&timer, (struct timer_config){
+    RETHROW(init_timer(&timer, (struct timer_config){
                                     .min_timeout = 100,
                                     .idle_cpu_percent_target = 10,
                                     .max_cpu_percent_target = 50,
                                 }));
+    RETHROW(init_attach_session(&attach_session, timer));
 
-    RETHROW(timing_add_watch(timer, git_repository_workdir(repo), &workdir_watch_id));
+    RETHROW(timing_add_or_modify_watch(timer, &workdir_watch_id, git_repository_workdir(repo)));
 
     while (keep_running) {
         struct node *top_header_left = NULL;
@@ -562,26 +546,18 @@ err_t run_dashboard() {
 
         RETHROW(timing_wait(timer));
 
-        memcpy(new_pwd, cwd, sizeof(new_pwd) - 1);
-        try_get_attached_terminal_workdir(session_id, new_pwd, sizeof(new_pwd) - 1, inotify_new_pwd_path,
-                                          sizeof(inotify_new_pwd_path) - 1, &is_attached);
+        RETHROW(get_attached_workdir(attach_session, new_pwd, sizeof(new_pwd) - 1, &is_attached));
 
-        bool is_relative = FALSE;
-        RETHROW(is_relative_to(new_pwd, repo_root, &is_relative));
-        if (strncmp(cwd, new_pwd, sizeof(cwd)) && is_relative) {
-            git_repository_free(repo);
-            ASSERT(!git_repository_open_ext(&repo, new_pwd, 0, "/"));
-        }
-        memcpy(cwd, new_pwd, sizeof(new_pwd) - 1);
+        if (is_attached && strncmp(cwd, new_pwd, sizeof(cwd))) {
+            strncpy(cwd, new_pwd, sizeof(cwd));
 
-        if (memcmp(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path))) {
-            if (attached_terminal_watch_id != INVALID_WATCH_ID) {
-                RETHROW(timing_modify_watch(timer, &attached_terminal_watch_id, inotify_new_pwd_path));
-            } else {
-                RETHROW(timing_add_watch(timer, inotify_new_pwd_path, &attached_terminal_watch_id));
+            bool is_relative = FALSE;
+            RETHROW(is_relative_to(new_pwd, repo_root, &is_relative));
+            if (is_relative) {
+                git_repository_free(repo);
+                ASSERT(!git_repository_open_ext(&repo, new_pwd, 0, "/"));
             }
         }
-        memcpy(prev_inotify_new_pwd_path, inotify_new_pwd_path, sizeof(prev_inotify_new_pwd_path));
 
         RETHROW(print_status(git_repository_workdir(repo), new_pwd, top, repo));
 
@@ -600,6 +576,8 @@ err_t run_dashboard() {
         RETHROW(append_child(top_header, &top_header_left));
         top_header_left->expand = 1;
         top_header_left->nodes_direction = nodes_direction_columns;
+
+        RETHROW(get_attach_session_id(attach_session, session_id, sizeof(session_id)));
 
         RETHROW(append_child(top_header, &title));
         title->fit_content = true;
@@ -641,7 +619,8 @@ err_t run_dashboard() {
     }
 
 cleanup:
-    RETHROW_PRINT(timing_free(timer));
+    RETHROW_PRINT(free_attach_session(attach_session));
+    RETHROW_PRINT(free_timer(timer));
     git_repository_free(repo);
     RETHROW_PRINT(clear_refs(&refs));
     RETHROW_PRINT(free_layout(layout));

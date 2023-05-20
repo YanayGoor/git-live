@@ -5,6 +5,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 err_t get_human_readable_time(int64_t t, char *buff, size_t len) {
     err_t err = NO_ERROR;
@@ -136,6 +137,23 @@ err_t is_relative_to(const char *path, const char *parent, bool *out) {
     }
 
     *out = TRUE;
+
+cleanup:
+    return err;
+}
+
+err_t file_exists(const char* path, bool* out) {
+    err_t err = NO_ERROR;
+    struct stat st = {0};
+
+    ASSERT(path);
+    ASSERT(out);
+
+    errno = 0;
+    int res = stat(path, &st);
+    ASSERT(res == 0 || errno == ENOENT);
+
+    *out = errno != ENOENT;
 
 cleanup:
     return err;

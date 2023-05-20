@@ -15,7 +15,6 @@ typedef int err_t;
 } while (0)
 
 #define ASSERT(x) do { \
-  errno = 0;           \
   if (!(x)) { \
     fprintf(stderr, "runtime error: %s assertion failed at %s:%d with errno %d\n", #x, __FILE__, __LINE__, errno); \
     err = 1;                   \
@@ -24,7 +23,6 @@ typedef int err_t;
 } while (0)
 
 #define ASSERT_PRINT(x) do { \
-  errno = 0;           \
   if (!(x)) { \
     fprintf(stderr, "runtime error: %s assertion failed at %s:%d with errno %d\n", #x, __FILE__, __LINE__, errno); \
     err = 1;                   \

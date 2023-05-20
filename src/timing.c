@@ -71,32 +71,32 @@ cleanup:
     return err;
 }
 
-err_t timing_init(struct timer **timing, struct timer_config config) {
+err_t init_timer(struct timer **timer, struct timer_config config) {
     err_t err = NO_ERROR;
     uint64_t time = 0;
 
-    ASSERT(timing);
+    ASSERT(timer);
     ASSERT(config.idle_cpu_percent_target > 0);
     ASSERT(config.max_cpu_percent_target > 0);
     ASSERT(config.idle_cpu_percent_target < 100);
     ASSERT(config.max_cpu_percent_target < 100);
 
-    *timing = malloc(sizeof(**timing));
-    ASSERT(*timing);
+    *timer = malloc(sizeof(**timer));
+    ASSERT(*timer);
 
     RETHROW(get_time_ms(&time));
 
-    (*timing)->config = config;
-    (*timing)->cpu_time_used = 0;
-    (*timing)->total_time_used = 0;
-    (*timing)->inotify_fd = inotify_init1(IN_NONBLOCK);
-    (*timing)->last_wakeup_time = time;
+    (*timer)->config = config;
+    (*timer)->cpu_time_used = 0;
+    (*timer)->total_time_used = 0;
+    (*timer)->inotify_fd = inotify_init1(IN_NONBLOCK);
+    (*timer)->last_wakeup_time = time;
 
 cleanup:
     return err;
 }
 
-err_t timing_free(struct timer *timer) {
+err_t free_timer(struct timer *timer) {
     err_t err = NO_ERROR;
 
     ASSERT(timer);
@@ -107,32 +107,7 @@ cleanup:
     return err;
 }
 
-err_t timing_add_watch(struct timer *timer, const char *path, int *out) {
-    err_t err = NO_ERROR;
-
-    ASSERT(timer);
-    ASSERT(path);
-
-    if (timer->inotify_fd == FD_INVALID) {
-        goto cleanup;
-    }
-
-    if (out) {
-        *out = INVALID_WATCH_ID;
-    }
-
-    int inotify_watch = inotify_add_watch(timer->inotify_fd, path, IN_CREATE | IN_MODIFY | IN_ATTRIB);
-    ASSERT(inotify_watch != INVALID_WATCH_ID);
-
-    if (out) {
-        *out = inotify_watch;
-    }
-
-cleanup:
-    return err;
-}
-
-err_t timing_modify_watch(struct timer *timer, int *watch_id, const char *path) {
+err_t timing_add_or_modify_watch(struct timer *timer, watch_id_t *watch_id, const char *path) {
     err_t err = NO_ERROR;
 
     ASSERT(timer);
@@ -143,7 +118,10 @@ err_t timing_modify_watch(struct timer *timer, int *watch_id, const char *path) 
         goto cleanup;
     }
 
-    ASSERT(!inotify_rm_watch(timer->inotify_fd, *watch_id));
+    if (*watch_id != INVALID_WATCH_ID) {
+        ASSERT(!inotify_rm_watch(timer->inotify_fd, *watch_id));
+    }
+
     *watch_id = inotify_add_watch(timer->inotify_fd, path, IN_MODIFY);
     ASSERT(*watch_id >= 0);
 
