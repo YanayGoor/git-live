@@ -114,9 +114,7 @@ err_t timing_add_or_modify_watch(struct timer *timer, watch_id_t *watch_id, cons
     ASSERT(path);
     ASSERT(watch_id);
 
-    if (timer->inotify_fd == FD_INVALID) {
-        goto cleanup;
-    }
+    ASSERT(timer->inotify_fd != FD_INVALID);
 
     if (*watch_id != INVALID_WATCH_ID) {
         ASSERT(!inotify_rm_watch(timer->inotify_fd, *watch_id));
