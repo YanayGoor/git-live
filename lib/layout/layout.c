@@ -80,27 +80,38 @@ static uint32_t get_overflow_min_height(struct node *node, struct size max_size)
             sz = MAX(sz, get_height(curr, max_size));
         }
 
+        uint32_t max_items_displayed = 0;
+        uint32_t curr_sz = sz;
+
         // increment the size until all children fit
-        while (sz < max_size.height) {
-            sz++;
+        while (curr_sz < max_size.height) {
             uint32_t column_height = 0;
             uint32_t columns_width = 0;
             uint32_t column_width = 0;
+            uint32_t curr_items_displayed = 0;
             LIST_FOREACH(curr, &node->nodes, entry) {
                 uint32_t height = get_height(curr, max_size);
 
-                // we are generated that height > sz because of the first loop.
-                if (column_height + height > sz) {
+                // we are guaranteed that height > curr_sz because of the first loop.
+                if (column_height + height > curr_sz) {
                     columns_width += column_width;
                     column_height = 0;
                     column_width = 0;
                 }
                 column_width = MAX(column_width, get_width(curr, (struct size){max_size.width, height}));
                 column_height += height;
+                curr_items_displayed++;
             }
             columns_width += column_width;
-            if (columns_width <= max_size.width)
+            if (columns_width > max_size.width && curr_items_displayed > max_items_displayed) {
+                sz = curr_sz;
+                max_items_displayed = curr_items_displayed;
+            }
+            if (columns_width <= max_size.width) {
+                sz = curr_sz;
                 break;
+            }
+            curr_sz++;
         }
     }
     return sz;
@@ -136,27 +147,38 @@ static uint32_t get_overflow_min_width(struct node *node, struct size max_size) 
             sz = MAX(sz, get_width(curr, max_size));
         }
 
+        uint32_t max_items_displayed = 0;
+        uint32_t curr_sz = sz;
+
         // increment the size until all children fit
-        while (sz < max_size.width) {
-            sz++;
+        while (curr_sz < max_size.width) {
             uint32_t row_width = 0;
             uint32_t rows_height = 0;
             uint32_t row_height = 0;
+            uint32_t curr_items_displayed = 0;
             LIST_FOREACH(curr, &node->nodes, entry) {
                 uint32_t width = get_width(curr, max_size);
 
-                // we are generated that width > sz because of the first loop.
-                if (row_width + width > sz) {
+                // we are guaranteed that width > curr_sz because of the first loop.
+                if (row_width + width > curr_sz) {
                     rows_height += row_height;
                     row_width = 0;
                     row_height = 0;
                 }
                 row_height = MAX(row_height, get_height(curr, (struct size){width, max_size.height}));
                 row_width += width;
+                curr_items_displayed++;
             }
             rows_height += row_height;
-            if (rows_height <= max_size.height)
+            if (rows_height > max_size.height && curr_items_displayed > max_items_displayed) {
+                sz = curr_sz;
+                max_items_displayed = curr_items_displayed;
+            }
+            if (rows_height <= max_size.height) {
+                sz = curr_sz;
                 break;
+            }
+            curr_sz++;
         }
     }
     return sz;
