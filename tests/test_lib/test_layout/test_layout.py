@@ -244,13 +244,13 @@ def test_basis(library: Library):
             NODE_DIRECTION_COLS,
             NODE_DIRECTION_COLS,
             3,
-            [b" aa bottom", b" a a      ", b"          ", b"          ", b"          "],
+            [b" aabottom ", b" a        ", b" a        ", b"          ", b"          "],
         ),
         (
             NODE_DIRECTION_ROWS,
             NODE_DIRECTION_ROWS,
             3,
-            [b" aa a     ", b" a        ", b"bottom    ", b"          ", b"          "],
+            [b" aa a a   ", b"bottom    ", b"          ", b"          ", b"          "],
         ),
         (
             NODE_DIRECTION_COLS,
@@ -798,17 +798,17 @@ def test_dont_use_hidden_items_in_size_calculation_cols(library: Library):
         (
             5,
             3,
-            [b"First", b" red ", b" blue"],
+            [b"First", b" red ", b"Secon"],
         ),
         (
             7,
             4,
-            [b"First h", b" red   ", b" blue  ", b" green "],
+            [b"First h", b" red bl", b"Second ", b"Third h"],
         ),
         (
             10,
             5,
-            [b"First head", b" red    br", b" blue   pu", b" green    ", b" yellow   "],
+            [b"First head", b" red  gree", b" blue yell", b"Second hea", b"Third head"],
         ),
         (
             20,
@@ -933,4 +933,84 @@ def test_complex_layout(
         text=expected,
         color=[[0] * width] * height,
         attr=[[0] * width] * height,
+    )
+
+
+def test_text_longer_then_screen_width(library: Library):
+    scr = VirtualScreen(10, 10)
+    layout, root = library.init_layout(scr)
+    root.contents.nodes_direction = NODE_DIRECTION_ROWS
+
+    top = library.append_child(root)
+    top.contents.fit_content = True
+    top.contents.wrap = 1
+    top.contents.nodes_direction = NODE_DIRECTION_ROWS
+    library.append_text(top, b"extremely long line bla bla")
+
+    bottom = library.append_child(root)
+    bottom.contents.expand = 1
+    bottom.contents.nodes_direction = NODE_DIRECTION_COLS
+    library.append_text(bottom, b"aaaa")
+
+    library.draw_layout(layout, scr)
+
+    print(scr)
+
+    assert scr == VirtualScreen(
+        width=10,
+        height=10,
+        text=[
+            b"extremely ",
+            b"aaaa      ",
+            b"          ",
+            b"          ",
+            b"          ",
+            b"          ",
+            b"          ",
+            b"          ",
+            b"          ",
+            b"          ",
+        ],
+        color=[[0] * 10] * 10,
+        attr=[[0] * 10] * 10,
+    )
+
+
+def test_text_higher_then_screen_height(library: Library):
+    scr = VirtualScreen(10, 10)
+    layout, root = library.init_layout(scr)
+    root.contents.nodes_direction = NODE_DIRECTION_COLS
+
+    top = library.append_child(root)
+    top.contents.fit_content = True
+    top.contents.wrap = 1
+    top.contents.nodes_direction = NODE_DIRECTION_COLS
+    library.append_text(top, b"e\nx\nt\nr\ne\nm\ne\nl\ny\n \nlo\n")
+
+    bottom = library.append_child(root)
+    bottom.contents.expand = 1
+    bottom.contents.nodes_direction = NODE_DIRECTION_ROWS
+    library.append_text(bottom, b"aaaa")
+
+    library.draw_layout(layout, scr)
+
+    print(scr)
+
+    assert scr == VirtualScreen(
+        width=10,
+        height=10,
+        text=[
+            b"e\naaaa    ",
+            b"x\n        ",
+            b"t\n        ",
+            b"r\n        ",
+            b"e\n        ",
+            b"m\n        ",
+            b"e\n        ",
+            b"l\n        ",
+            b"y\n        ",
+            b" \n        ",
+        ],
+        color=[[0] * 10] * 10,
+        attr=[[0] * 10] * 10,
     )
